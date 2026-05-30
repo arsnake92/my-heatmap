@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>自選即時熱力圖</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
@@ -44,28 +44,20 @@
         @media (max-width: 768px) {
             body { overscroll-behavior-y: contain; }
 
-            /* 熱力圖改為「直向自然捲動」，停用電腦版的拖曳/滾輪縮放畫布 */
+            /* 手機版：沿用電腦版同一張 treemap，改用「雙指縮放 + 單指拖曳」操作 */
             #treemapContainer {
-                overflow-y: auto !important;
-                overflow-x: hidden !important;
-                -webkit-overflow-scrolling: touch;
+                touch-action: none;          /* 由 JS 接管手勢，避免瀏覽器原生捲動干擾縮放 */
                 cursor: default !important;
             }
-            #zoomLayer {
-                position: static !important;
-                transform: none !important;
-                min-width: 0 !important;
-                min-height: 0 !important;
-                width: 100% !important;
-                display: flex !important;
-                flex-direction: column !important;
-                flex-wrap: nowrap !important;
-                gap: 0.75rem !important;
-                padding: 0.75rem !important;
-            }
+            /* #zoomLayer 維持與電腦版相同的 absolute + transform 行為，這裡不覆寫 */
 
-            /* 隱藏電腦版專用的縮放控制鈕（手機用原生捲動即可） */
-            #zoomControls { display: none !important; }
+            /* 縮放控制鈕在手機上也保留（放大 / 重設 / 縮小），按鈕加大好點 */
+            #zoomControls {
+                bottom: calc(1rem + env(safe-area-inset-bottom, 0px)) !important;
+                right: 1rem !important;
+            }
+            #zoomControls button { padding: 0.6rem !important; }
+            #zoomControls svg { width: 1.4rem !important; height: 1.4rem !important; }
 
             /* 側邊欄在手機上 = 全螢幕滑出抽屜 */
             #sidebar {
@@ -150,7 +142,6 @@
 
     <main class="flex-1 flex overflow-hidden relative">
         <aside id="sidebar" class="w-full lg:w-96 bg-slate-800/80 border-r border-slate-700 flex flex-col overflow-y-auto no-scrollbar transition-all duration-300 relative z-10 flex-shrink-0">
-            <!-- 手機版抽屜頂部（電腦版以 md:hidden 隱藏，不影響電腦版） -->
             <div class="md:hidden flex items-center justify-between p-4 border-b border-slate-700 sticky top-0 bg-slate-800 z-10">
                 <span class="text-sm font-semibold text-slate-200">設定與清單管理</span>
                 <button onclick="toggleSidebar()" class="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-200" title="關閉">
@@ -158,7 +149,6 @@
                 </button>
             </div>
 
-            <!-- 雲端同步 (JSONBlob) -->
             <div class="p-4 border-b border-slate-700">
                 <h2 class="text-sm font-semibold mb-2 flex items-center gap-2">
                     <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg>
@@ -167,7 +157,6 @@
                 </h2>
                 <div id="cloudStatusText" class="text-[11px] text-slate-400 mb-2">尚未啟用雲端同步</div>
 
-                <!-- 尚未連線：啟用 / 輸入同步碼 -->
                 <div id="cloudSetup" class="space-y-2">
                     <button id="cloudEnableBtn" onclick="cloudEnable()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2 rounded transition-colors text-xs">
                         ☁️ 啟用雲端同步（建立同步碼）
@@ -183,7 +172,6 @@
                     </div>
                 </div>
 
-                <!-- 已連線：顯示同步碼與操作 -->
                 <div id="cloudConnected" class="space-y-2 hidden">
                     <div class="bg-slate-900 border border-slate-700 rounded p-2">
                         <div class="text-[10px] text-slate-400 mb-1">你的同步碼（在其他裝置貼上即可同步）</div>
@@ -200,7 +188,6 @@
                 </div>
             </div>
 
-            <!-- 新增群組 -->
             <div class="p-4 border-b border-slate-700">
                 <h2 class="text-sm font-semibold mb-2 flex items-center gap-2">
                     <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
@@ -214,7 +201,6 @@
                 </div>
             </div>
 
-            <!-- 新增股票 -->
             <div class="p-4 border-b border-slate-700">
                 <h2 class="text-sm font-semibold mb-2 flex items-center gap-2">
                     <svg class="w-4 h-4 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
@@ -231,7 +217,6 @@
                 </div>
             </div>
 
-            <!-- 資料管理 -->
             <div class="p-4 flex-1">
                 <h2 class="text-sm font-semibold mb-3">資料清單管理 (點擊展開)</h2>
                 <div id="dataList" class="space-y-2 pb-10"></div>
@@ -251,7 +236,6 @@
                 </div>
             </div>
 
-            <!-- 縮放按鈕 -->
             <div id="zoomControls" class="absolute bottom-6 right-6 flex flex-col gap-1.5 bg-slate-800/90 p-1.5 rounded-lg border border-slate-700 shadow-xl backdrop-blur z-20">
                 <button onclick="controlZoom(0.1)" class="p-2 hover:bg-slate-700 rounded text-slate-200 transition-colors" title="放大">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
@@ -270,7 +254,6 @@
 
     <div id="tooltip"></div>
 
-    <!-- 行動版股票詳情面板（手機點擊個股顯示；電腦版維持 hover tooltip，不會觸發） -->
     <div id="mobileSheetBackdrop" onclick="closeMobileSheet()"></div>
     <div id="mobileSheet">
         <div class="grabber"></div>
@@ -306,6 +289,22 @@
         let updateIntervalId = null;
         let isFetching = false;
         
+        // ===== 裝置判斷（行動版 / 電腦版）=====
+        let IS_MOBILE = window.matchMedia('(max-width: 768px)').matches;
+
+        // ===== 雲端同步 (JSONBlob) 狀態 =====
+        const SYNC_ID_KEY = 'custom_heatmap_sync_id_v8';
+        const STRUCT_TS_KEY = 'custom_heatmap_struct_ts_v8';
+        let syncBlobId = localStorage.getItem(SYNC_ID_KEY) || null;
+        let lastStructureTs = parseInt(localStorage.getItem(STRUCT_TS_KEY) || '0', 10);
+        
+        // 預設強制使用專屬的同步伺服器 (Cloudflare Worker 代理)
+        const syncServer = 'https://restless-math-6578.arthur920616.workers.dev';
+        let cloudPushTimer = null;
+
+        function usingProxy() { return true; }
+        function syncBase() { return syncServer; }
+
         let expandedCategories = new Set();
         let isFirstLoad = true;
 
@@ -315,19 +314,24 @@
         const colorModeBtn = document.getElementById('colorModeBtn');
         const autoUpdateToggle = document.getElementById('autoUpdateToggle');
         const sidebar = document.getElementById('sidebar');
+        const sidebarBackdrop = document.getElementById('sidebarBackdrop');
 
-        // ===== 裝置判斷（行動版 / 電腦版）=====
-        let IS_MOBILE = window.matchMedia('(max-width: 768px)').matches;
-
-        // ===== 雲端同步 (JSONBlob) 狀態 =====
-        const JSONBLOB_BASE = 'https://jsonblob.com/api/jsonBlob';
-        const SYNC_ID_KEY = 'custom_heatmap_sync_id_v8';
-        const STRUCT_TS_KEY = 'custom_heatmap_struct_ts_v8';
-        let syncBlobId = localStorage.getItem(SYNC_ID_KEY) || null;
-        let lastStructureTs = parseInt(localStorage.getItem(STRUCT_TS_KEY) || '0', 10);
-        let cloudPushTimer = null;
-
-        function toggleSidebar() { sidebar.classList.toggle('hidden'); }
+        function toggleSidebar() { 
+            const isClosed = sidebar.classList.contains('-translate-x-full');
+            if (isClosed) {
+                sidebar.classList.remove('-translate-x-full');
+                if (IS_MOBILE) {
+                    sidebarBackdrop.classList.remove('hidden');
+                    setTimeout(() => sidebarBackdrop.classList.add('opacity-100'), 10);
+                }
+            } else {
+                sidebar.classList.add('-translate-x-full');
+                if (IS_MOBILE) {
+                    sidebarBackdrop.classList.remove('opacity-100');
+                    setTimeout(() => sidebarBackdrop.classList.add('hidden'), 300);
+                }
+            }
+        }
 
         let scale = 1, panX = 0, panY = 0;
         let isPanning = false, startMouseX = 0, startMouseY = 0;
@@ -339,13 +343,30 @@
             applyZoom(delta > 0 ? 1.2 : 0.8, rect.width / 2, rect.height / 2);
         }
 
-        function resetZoom() { scale = 1; panX = 0; panY = 0; updateTransform(); }
+        function resetZoom() { 
+            if (IS_MOBILE) { fitMobileView(); return; }
+            scale = 1; panX = 0; panY = 0; updateTransform(); 
+        }
 
         function applyZoom(multiplier, pointerX, pointerY) {
             const newScale = Math.max(0.2, Math.min(scale * multiplier, 5)); 
             panX = pointerX - (pointerX - panX) * (newScale / scale);
             panY = pointerY - (pointerY - panY) * (newScale / scale);
             scale = newScale; updateTransform();
+        }
+
+        // ===== 行動版觸控手勢：單指拖曳平移、雙指 pinch 縮放 =====
+        let touchMode = 0;            
+        let tStartX = 0, tStartY = 0; 
+        let pinchLastDist = 0;        
+
+        function touchDist(t) {
+            const dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY;
+            return Math.hypot(dx, dy);
+        }
+        function touchMid(t) {
+            const r = container.getBoundingClientRect();
+            return { x: (t[0].clientX + t[1].clientX) / 2 - r.left, y: (t[0].clientY + t[1].clientY) / 2 - r.top };
         }
 
         container.addEventListener('wheel', (e) => {
@@ -369,6 +390,276 @@
 
         window.addEventListener('mouseup', () => { isPanning = false; container.classList.remove('grabbing-cursor'); });
 
+        container.addEventListener('touchstart', (e) => {
+            if (!IS_MOBILE) return;
+            if (e.target.closest('#zoomControls')) return; 
+            if (e.touches.length === 1) {
+                touchMode = 1;
+                tStartX = e.touches[0].clientX - panX;
+                tStartY = e.touches[0].clientY - panY;
+            } else if (e.touches.length === 2) {
+                touchMode = 2;
+                pinchLastDist = touchDist(e.touches);
+            }
+        }, { passive: false });
+
+        container.addEventListener('touchmove', (e) => {
+            if (!IS_MOBILE || touchMode === 0) return;
+            if (touchMode === 2 && e.touches.length === 2) {
+                e.preventDefault();
+                const d = touchDist(e.touches);
+                if (pinchLastDist > 0) {
+                    const m = touchMid(e.touches);
+                    applyZoom(d / pinchLastDist, m.x, m.y); 
+                }
+                pinchLastDist = d;
+            } else if (touchMode === 1 && e.touches.length === 1) {
+                const nx = e.touches[0].clientX - tStartX;
+                const ny = e.touches[0].clientY - tStartY;
+                if (Math.abs(nx - panX) + Math.abs(ny - panY) > 2) e.preventDefault();
+                panX = nx; panY = ny; updateTransform();
+            }
+        }, { passive: false });
+
+        function endTouch(e) {
+            if (e.touches && e.touches.length === 1) {
+                touchMode = 1;
+                tStartX = e.touches[0].clientX - panX;
+                tStartY = e.touches[0].clientY - panY;
+                pinchLastDist = 0;
+            } else if (!e.touches || e.touches.length === 0) {
+                touchMode = 0; pinchLastDist = 0;
+            }
+        }
+        container.addEventListener('touchend', endTouch);
+        container.addEventListener('touchcancel', endTouch);
+
+        function fitMobileView() {
+            requestAnimationFrame(() => {
+                const cw = container.clientWidth, ch = container.clientHeight;
+                if (!cw || !ch) return;
+                const prev = zoomLayer.style.transform;
+                zoomLayer.style.transform = 'none';            
+                const lw = zoomLayer.scrollWidth || 1000;
+                const lh = zoomLayer.scrollHeight || 800;
+                zoomLayer.style.transform = prev;
+                const fit = Math.min(cw / lw, ch / lh, 1);
+                scale = Math.max(0.2, fit * 0.98);
+                panX = Math.max(0, (cw - lw * scale) / 2);     
+                panY = 12;
+                updateTransform();
+            });
+        }
+
+        // =====================================
+        // 資料同步與儲存管理
+        // =====================================
+        function structureSnapshot() {
+            return {
+                app: 'heatmap', v: 8,
+                updatedAt: Date.now(),
+                colorMode: currentMode,
+                items: chartData
+                    .filter(d => d.type === 'root' || d.type === 'category' || d.type === 'stock')
+                    .map(d => ({ id: d.id, parent: d.parent, type: d.type }))
+            };
+        }
+
+        function applySnapshot(snap) {
+            if (!snap || !Array.isArray(snap.items)) return false;
+            const oldMap = {};
+            chartData.forEach(d => { if (d.type === 'stock') oldMap[d.id] = d; });
+            const rebuilt = snap.items.map(it => {
+                if (it.type === 'stock') {
+                    const o = oldMap[it.id] || {};
+                    return {
+                        id: it.id, parent: it.parent, type: 'stock',
+                        change: (typeof o.change === 'number' ? o.change : 0),
+                        price: (o.price !== undefined ? o.price : null),
+                        currency: (o.currency || 'USD'),
+                        companyName: (o.companyName || '')
+                    };
+                }
+                return { id: it.id, parent: it.parent, type: it.type, change: 0 };
+            });
+            if (!rebuilt.find(d => d.type === 'root')) rebuilt.unshift({ id: 'ROOT', parent: '', type: 'root', change: 0 });
+            chartData = rebuilt;
+            if (snap.colorMode === 'US' || snap.colorMode === 'TW') { currentMode = snap.colorMode; updateColorModeButtonUI(); }
+            chartData.forEach(d => { if (d.type === 'category') expandedCategories.add(d.id); });
+            saveData();
+            return true;
+        }
+
+        function setCloudUI() {
+            const dot = document.getElementById('cloudDot');
+            const statusText = document.getElementById('cloudStatusText');
+            const setup = document.getElementById('cloudSetup');
+            const connected = document.getElementById('cloudConnected');
+            if (!dot) return;
+            
+            if (syncBlobId) {
+                setup.classList.add('hidden');
+                connected.classList.remove('hidden');
+                document.getElementById('cloudCodeText').textContent = syncBlobId;
+                dot.className = "ml-auto inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500";
+                dot.title = "雲端同步已啟用";
+                statusText.textContent = "已啟用，變更會自動上傳、開啟時自動拉取";
+            } else {
+                setup.classList.remove('hidden');
+                connected.classList.add('hidden');
+                dot.className = "ml-auto inline-flex h-2.5 w-2.5 rounded-full bg-slate-500";
+                dot.title = "未連線";
+                statusText.textContent = "尚未啟用雲端同步";
+            }
+        }
+
+        function cloudFlash(busy) {
+            const dot = document.getElementById('cloudDot');
+            if (dot && syncBlobId) dot.style.opacity = busy ? '0.35' : '1';
+        }
+
+        async function cloudEnable() {
+            const btn = document.getElementById('cloudEnableBtn');
+            btn.disabled = true; btn.textContent = '建立中…';
+            try {
+                const snap = structureSnapshot();
+                const res = await fetch(syncBase(), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify(snap)
+                });
+                if (!res.ok) throw new Error('伺服器回應 HTTP ' + res.status);
+                let id = '';
+                
+                const data = await res.json().catch(() => ({}));
+                id = (data && data.id ? String(data.id) : '').trim();
+                if (!id) throw new Error('代理伺服器未回傳同步碼（請確認 Worker 程式碼）');
+                
+                if (!id) throw new Error('同步碼格式異常');
+                syncBlobId = id;
+                lastStructureTs = snap.updatedAt;
+                localStorage.setItem(SYNC_ID_KEY, syncBlobId);
+                localStorage.setItem(STRUCT_TS_KEY, String(lastStructureTs));
+                setCloudUI();
+                showMessage('雲端同步已啟用！複製同步碼或連結到其他裝置即可');
+            } catch (err) {
+                let msg = err.message || String(err);
+                if (/fetch/i.test(msg)) msg = '無法連線網路異常';
+                showMessage('啟用失敗：' + msg, true);
+            } finally {
+                btn.disabled = false; btn.textContent = '☁️ 啟用雲端同步（建立同步碼）';
+            }
+        }
+
+        async function cloudJoin(idArg) {
+            const input = document.getElementById('cloudJoinInput');
+            let id = (idArg || (input ? input.value : '') || '').trim();
+            if (id.includes('sync=')) id = id.split('sync=').pop();
+            if (id.includes('/')) id = id.split('/').filter(Boolean).pop();
+            id = id.replace('#', '').trim();
+            if (!id) return showMessage('請貼上同步碼', true);
+            try {
+                const ok = await cloudPull(true, id);
+                if (ok) {
+                    syncBlobId = id;
+                    localStorage.setItem(SYNC_ID_KEY, syncBlobId);
+                    setCloudUI();
+                    if (input) input.value = '';
+                    showMessage('已連線並從雲端載入清單！');
+                    updateAll(); fetchRealTimeData(); 
+                    if(IS_MOBILE) toggleSidebar();
+                }
+            } catch (err) {
+                showMessage('連線失敗：' + err.message, true);
+            }
+        }
+
+        async function cloudPull(adopt, idOverride) {
+            const id = idOverride || syncBlobId;
+            if (!id) return false;
+            cloudFlash(true);
+            try {
+                const res = await fetch(syncBase() + '/' + id, { headers: { 'Accept': 'application/json' } });
+                if (res.status === 404) throw new Error('找不到此同步碼的資料');
+                if (!res.ok) throw new Error('伺服器回應 HTTP ' + res.status);
+                const snap = await res.json();
+                const remoteTs = snap.updatedAt || 0;
+                if (adopt || remoteTs > lastStructureTs) {
+                    applySnapshot(snap);
+                    lastStructureTs = remoteTs || Date.now();
+                    localStorage.setItem(STRUCT_TS_KEY, String(lastStructureTs));
+                    if (!adopt) { updateAll(); fetchRealTimeData(); }
+                    return true;
+                }
+                return false;
+            } finally {
+                cloudFlash(false);
+            }
+        }
+
+        function scheduleCloudPush() {
+            if (!syncBlobId) return;
+            lastStructureTs = Date.now();
+            localStorage.setItem(STRUCT_TS_KEY, String(lastStructureTs));
+            if (cloudPushTimer) clearTimeout(cloudPushTimer);
+            cloudPushTimer = setTimeout(cloudPush, 700);
+        }
+
+        async function cloudPush() {
+            if (!syncBlobId) return;
+            cloudFlash(true);
+            try {
+                const snap = structureSnapshot();
+                snap.updatedAt = lastStructureTs || Date.now();
+                const res = await fetch(syncBase() + '/' + syncBlobId, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify(snap)
+                });
+                if (!res.ok) throw new Error('伺服器回應 HTTP ' + res.status);
+            } catch (err) {
+                showMessage('雲端上傳失敗：' + err.message, true);
+            } finally {
+                cloudFlash(false);
+            }
+        }
+
+        async function cloudPullNow() {
+            if (!syncBlobId) return;
+            try {
+                const changed = await cloudPull(true);
+                showMessage(changed ? '已從雲端更新清單' : '雲端沒有資料變更');
+                updateAll(); fetchRealTimeData(); 
+                if(IS_MOBILE) toggleSidebar();
+            } catch (err) { showMessage('拉取失敗：' + err.message, true); }
+        }
+
+        function cloudUnlink() {
+            if (!confirm('要中斷此裝置的雲端同步嗎？\n（雲端資料與其他裝置不受影響，本機清單會保留）')) return;
+            syncBlobId = null;
+            localStorage.removeItem(SYNC_ID_KEY);
+            setCloudUI();
+            showMessage('已中斷此裝置的雲端同步');
+        }
+
+        function cloudCopyCode() {
+            if (!syncBlobId) return;
+            navigator.clipboard?.writeText(syncBlobId)
+                .then(() => showMessage('已複製同步碼'))
+                .catch(() => showMessage('請手動複製：' + syncBlobId, true));
+        }
+
+        function cloudCopyLink() {
+            if (!syncBlobId) return;
+            const link = location.origin + location.pathname + '#sync=' + syncBlobId;
+            navigator.clipboard?.writeText(link)
+                .then(() => showMessage('已複製同步連結，在其他裝置開啟即可自動同步'))
+                .catch(() => showMessage('請手動複製：' + link, true));
+        }
+
+        // =====================================
+        // 基礎存取與 UI
+        // =====================================
         function loadData() {
             const savedData = localStorage.getItem('custom_heatmap_data_v8');
             const savedMode = localStorage.getItem('custom_heatmap_color_mode_v8');
@@ -483,7 +774,7 @@
         function addStock() {
             const name = document.getElementById('stockName').value.trim().toUpperCase();
             const parent = document.getElementById('stockParent').value;
-            const change = 0; // 預設漲跌幅為 0
+            const change = 0; 
             if (!name || !parent) return showMessage('請輸入完整且正確的資料', true);
             
             const existingIndex = chartData.findIndex(d => d.id === name);
@@ -496,7 +787,8 @@
                 showMessage(`已新增股票: ${name}`);
             }
             expandedCategories.add(parent); document.getElementById('stockName').value = '';
-            saveData(); updateAll(); scheduleCloudPush(); fetchRealTimeData(); closeDrawerIfMobile();
+            if(IS_MOBILE) toggleSidebar();
+            saveData(); updateAll(); scheduleCloudPush(); fetchRealTimeData();
         }
 
         function deleteItem(id) {
@@ -512,7 +804,6 @@
 
         async function fetchRealTimeData() {
             if (isFetching) return;
-            
             isFetching = true; toggleRefreshUI(true);
 
             const stocks = chartData.filter(d => d.type === 'stock');
@@ -585,55 +876,107 @@
 
         function updateAll() { updateDropdowns(); renderDataList(); renderChart(); }
 
-        // 渲染分流：電腦版走原本的 renderTreemap（完全不變），行動版走 renderTreemapMobile
-        function renderChart() { IS_MOBILE ? renderTreemapMobile() : renderTreemap(); }
+        function renderChart() {
+            renderTreemap();
+            if (IS_MOBILE) fitMobileView();
+        }
 
-        // ===== 行動版熱力圖：直向堆疊、響應式格子、放大點擊區、點擊看詳情 =====
-        function renderTreemapMobile() {
-            zoomLayer.innerHTML = '';
+        function getChangeColor(change) {
+            return currentMode === 'US' 
+                ? d3.scaleLinear().domain([-5, 0, 5]).range(["#dc2626", "#475569", "#16a34a"]).clamp(true)(change)
+                : d3.scaleLinear().domain([-5, 0, 5]).range(["#16a34a", "#475569", "#dc2626"]).clamp(true)(change);
+        }
+
+        function updateColorModeButtonUI() {
+            if (currentMode === 'US') {
+                colorModeBtn.textContent = '切換顏色 (現為: 美股)';
+                colorModeBtn.classList.replace('bg-red-700', 'bg-slate-700'); colorModeBtn.classList.replace('border-red-600', 'border-slate-600');
+            } else {
+                colorModeBtn.textContent = '切換顏色 (現為: 台股)';
+                colorModeBtn.classList.replace('bg-slate-700', 'bg-red-700'); colorModeBtn.classList.replace('border-slate-600', 'border-red-600');
+            }
+        }
+
+        colorModeBtn.addEventListener('click', () => { currentMode = currentMode === 'US' ? 'TW' : 'US'; updateColorModeButtonUI(); saveData(); renderChart(); scheduleCloudPush(); });
+
+        function renderTreemap() {
+            zoomLayer.innerHTML = ''; 
             const stocks = chartData.filter(d => d.type === 'stock');
-            const emptyEl = document.getElementById('emptyState');
-            if (stocks.length === 0) { emptyEl.classList.remove('hidden'); return; }
-            emptyEl.classList.add('hidden');
+            if (stocks.length === 0) { document.getElementById('emptyState').classList.remove('hidden'); return; }
+            document.getElementById('emptyState').classList.add('hidden');
 
             chartData.filter(d => d.type === 'category').forEach(cat => {
                 const catStocks = chartData.filter(d => d.type === 'stock' && d.parent === cat.id);
                 if (catStocks.length === 0) return;
 
-                const avgChange = (catStocks.reduce((s, x) => s + x.change, 0) / catStocks.length).toFixed(2);
+                const totalChange = catStocks.reduce((sum, stock) => sum + stock.change, 0);
+                const avgChange = (totalChange / catStocks.length).toFixed(2);
                 const avgColor = getChangeColor(avgChange);
+                const cols = Math.ceil(Math.sqrt(catStocks.length));
 
                 const catDiv = document.createElement('div');
-                catDiv.className = "bg-slate-900 border rounded-xl overflow-hidden shadow-lg w-full";
+                catDiv.className = "bg-slate-900 border-2 rounded-xl overflow-hidden shadow-2xl flex flex-col transition-all mb-2"; 
                 catDiv.style.borderColor = avgColor;
 
                 const header = document.createElement('div');
-                header.className = "px-3 py-2.5 bg-slate-800 border-b flex items-center justify-between";
+                header.className = "px-3 py-2.5 bg-slate-800 border-b-2 flex items-center justify-between";
                 header.style.borderBottomColor = avgColor;
                 header.innerHTML = `
                     <span class="text-slate-100 font-bold text-sm tracking-wide">${cat.id}</span>
-                    <span class="font-mono text-xs font-bold px-2 py-0.5 rounded bg-black/40" style="color: ${avgColor}">${avgChange > 0 ? '+' : ''}${avgChange}%</span>
+                    <span class="font-mono text-xs font-bold px-2 py-0.5 rounded bg-black/40 shadow-inner" style="color: ${avgColor}">
+                        ${avgChange > 0 ? '+' : ''}${avgChange}%
+                    </span>
                 `;
                 catDiv.appendChild(header);
 
-                const grid = document.createElement('div');
-                grid.className = "p-2 grid gap-1.5";
-                grid.style.gridTemplateColumns = "repeat(auto-fill, minmax(72px, 1fr))";
+                const gridDiv = document.createElement('div');
+                gridDiv.className = "p-1.5 grid gap-1.5";
+                gridDiv.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
 
                 catStocks.forEach(stock => {
-                    const tile = document.createElement('button');
-                    tile.type = "button";
-                    tile.className = "aspect-square rounded-lg flex flex-col items-center justify-center active:scale-95 transition-transform relative border border-black/20 shadow-sm";
-                    tile.style.backgroundColor = getChangeColor(stock.change);
-                    tile.innerHTML = `
-                        <span class="text-white font-bold text-xs truncate w-full text-center px-1 pointer-events-none">${stock.id}</span>
-                        <span class="text-white/95 font-mono text-[10px] font-medium mt-0.5 pointer-events-none">${stock.change > 0 ? '+' : ''}${stock.change}%</span>
+                    const stockDiv = document.createElement('div');
+                    stockDiv.className = "w-[60px] h-[60px] md:w-[54px] md:h-[54px] rounded-md flex flex-col items-center justify-center cursor-pointer transition-transform hover:scale-110 hover:z-10 relative border border-black/20 shadow-sm";
+                    stockDiv.style.backgroundColor = getChangeColor(stock.change);
+
+                    stockDiv.innerHTML = `
+                        <span class="text-white font-bold text-[11px] md:text-[11px] truncate w-full text-center px-0.5 pointer-events-none">${stock.id}</span>
+                        <span class="text-white/95 font-mono text-[10px] md:text-[9px] font-medium mt-0.5 pointer-events-none">${stock.change > 0 ? '+' : ''}${stock.change}%</span>
                     `;
-                    tile.addEventListener('click', () => openMobileSheet(stock, cat.id));
-                    grid.appendChild(tile);
+
+                    const showTooltip = (event) => {
+                        const rect = container.getBoundingClientRect();
+                        tooltip.style.opacity = 1;
+                        
+                        const priceDisplay = stock.price ? `<span class="font-mono text-white text-base">${stock.price}</span> <span class="text-xs text-slate-400">${stock.currency}</span>` : `<span class="text-slate-400 italic">無報價資料</span>`;
+                        const companyNameText = stock.companyName || '（擷取中...）';
+
+                        tooltip.innerHTML = `
+                            <div class="font-bold text-lg mb-0.5 flex items-center gap-2"><span>${stock.id}</span><span class="text-xs px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 font-normal border border-slate-600">${cat.id}</span></div>
+                            <div class="text-[11px] text-blue-200 mb-2 font-medium opacity-90 truncate max-w-[200px]">${companyNameText}</div>
+                            <div class="space-y-1 text-xs text-slate-300"><div>目前價格: ${priceDisplay}</div></div>
+                            <div class="mt-2.5 pt-1.5 border-t border-slate-700 flex items-center justify-between"><span class="text-[11px] text-slate-400">今日漲跌:</span><span class="text-base font-mono font-bold" style="color: ${getChangeColor(stock.change)}">${stock.change > 0 ? '+' : ''}${stock.change}%</span></div>
+                        `;
+                        
+                        let clientX = event.touches ? event.touches[0].clientX : event.clientX;
+                        let clientY = event.touches ? event.touches[0].clientY : event.clientY;
+
+                        let x = clientX - rect.left + 15;
+                        let y = clientY - rect.top + 15;
+                        if (x + tooltip.offsetWidth > rect.width) x = x - tooltip.offsetWidth - 30;
+                        if (y + tooltip.offsetHeight > rect.height) y = y - tooltip.offsetHeight - 30;
+                        tooltip.style.left = x + 'px'; tooltip.style.top = y + 'px';
+                    };
+
+                    stockDiv.addEventListener('mousemove', showTooltip);
+                    stockDiv.addEventListener('touchstart', showTooltip, {passive: true});
+
+                    stockDiv.addEventListener('mouseout', () => { tooltip.style.opacity = 0; });
+                    stockDiv.addEventListener('touchend', () => { setTimeout(()=>tooltip.style.opacity = 0, 1500); });
+                    stockDiv.addEventListener('click', () => { if (IS_MOBILE) openMobileSheet(stock, cat.id); });
+
+                    gridDiv.appendChild(stockDiv);
                 });
-                catDiv.appendChild(grid);
-                zoomLayer.appendChild(catDiv);
+                catDiv.appendChild(gridDiv); zoomLayer.appendChild(catDiv);
             });
         }
 
@@ -676,310 +1019,11 @@
             document.getElementById('mobileSheetBackdrop').classList.remove('show');
         }
 
-        function closeDrawerIfMobile() { if (IS_MOBILE) sidebar.classList.add('hidden'); }
-
-        function getChangeColor(change) {
-            return currentMode === 'US' 
-                ? d3.scaleLinear().domain([-5, 0, 5]).range(["#dc2626", "#475569", "#16a34a"]).clamp(true)(change)
-                : d3.scaleLinear().domain([-5, 0, 5]).range(["#16a34a", "#475569", "#dc2626"]).clamp(true)(change);
-        }
-
-        function updateColorModeButtonUI() {
-            if (currentMode === 'US') {
-                colorModeBtn.textContent = '美股 (綠漲紅跌)';
-                colorModeBtn.classList.replace('bg-red-700', 'bg-slate-700'); colorModeBtn.classList.replace('border-red-600', 'border-slate-600');
-            } else {
-                colorModeBtn.textContent = '台股 (紅漲綠跌)';
-                colorModeBtn.classList.replace('bg-slate-700', 'bg-red-700'); colorModeBtn.classList.replace('border-slate-600', 'border-red-600');
-            }
-        }
-
-        colorModeBtn.addEventListener('click', () => { currentMode = currentMode === 'US' ? 'TW' : 'US'; updateColorModeButtonUI(); saveData(); renderChart(); scheduleCloudPush(); });
-
-        function renderTreemap() {
-            zoomLayer.innerHTML = ''; 
-            const stocks = chartData.filter(d => d.type === 'stock');
-            if (stocks.length === 0) { document.getElementById('emptyState').classList.remove('hidden'); return; }
-            document.getElementById('emptyState').classList.add('hidden');
-
-            chartData.filter(d => d.type === 'category').forEach(cat => {
-                const catStocks = chartData.filter(d => d.type === 'stock' && d.parent === cat.id);
-                if (catStocks.length === 0) return;
-
-                const totalChange = catStocks.reduce((sum, stock) => sum + stock.change, 0);
-                const avgChange = (totalChange / catStocks.length).toFixed(2);
-                const avgColor = getChangeColor(avgChange);
-                const cols = Math.ceil(Math.sqrt(catStocks.length));
-
-                const catDiv = document.createElement('div');
-                catDiv.className = "bg-slate-900 border-2 rounded-xl overflow-hidden shadow-2xl flex flex-col transition-all mb-2"; 
-                catDiv.style.borderColor = avgColor;
-
-                const header = document.createElement('div');
-                header.className = "px-3 py-2 bg-slate-800 border-b-2 flex items-center justify-between";
-                header.style.borderBottomColor = avgColor;
-                header.innerHTML = `
-                    <span class="text-slate-100 font-bold text-[13px] tracking-wide">${cat.id}</span>
-                    <span class="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-black/40 shadow-inner" style="color: ${avgColor}">
-                        ${avgChange > 0 ? '+' : ''}${avgChange}%
-                    </span>
-                `;
-                catDiv.appendChild(header);
-
-                const gridDiv = document.createElement('div');
-                gridDiv.className = "p-1.5 grid gap-1";
-                gridDiv.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
-
-                catStocks.forEach(stock => {
-                    const stockDiv = document.createElement('div');
-                    stockDiv.className = "w-[54px] h-[54px] rounded-md flex flex-col items-center justify-center cursor-pointer transition-transform hover:scale-110 hover:z-10 relative border border-black/20 shadow-sm";
-                    stockDiv.style.backgroundColor = getChangeColor(stock.change);
-
-                    stockDiv.innerHTML = `
-                        <span class="text-white font-bold text-[11px] truncate w-full text-center px-0.5 pointer-events-none">${stock.id}</span>
-                        <span class="text-white/95 font-mono text-[9px] font-medium mt-0.5 pointer-events-none">${stock.change > 0 ? '+' : ''}${stock.change}%</span>
-                    `;
-
-                    stockDiv.addEventListener('mousemove', (event) => {
-                        const rect = container.getBoundingClientRect();
-                        tooltip.style.opacity = 1;
-                        
-                        const priceDisplay = stock.price ? `<span class="font-mono text-white text-base">${stock.price}</span> <span class="text-xs text-slate-400">${stock.currency}</span>` : `<span class="text-slate-400 italic">無報價資料</span>`;
-                        const companyNameText = stock.companyName || '（擷取中 / 無公司名稱）';
-
-                        tooltip.innerHTML = `
-                            <div class="font-bold text-lg mb-0.5 flex items-center gap-2"><span>${stock.id}</span><span class="text-xs px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 font-normal border border-slate-600">${cat.id}</span></div>
-                            <div class="text-[11px] text-blue-200 mb-2 font-medium opacity-90 truncate max-w-[250px]">${companyNameText}</div>
-                            <div class="space-y-1 text-xs text-slate-300"><div>目前價格: ${priceDisplay}</div></div>
-                            <div class="mt-2.5 pt-1.5 border-t border-slate-700 flex items-center justify-between"><span class="text-[11px] text-slate-400">今日漲跌:</span><span class="text-base font-mono font-bold" style="color: ${getChangeColor(stock.change)}">${stock.change > 0 ? '+' : ''}${stock.change}%</span></div>
-                        `;
-                        
-                        let x = event.clientX - rect.left + 15;
-                        let y = event.clientY - rect.top + 15;
-                        if (x + tooltip.offsetWidth > rect.width) x = x - tooltip.offsetWidth - 30;
-                        if (y + tooltip.offsetHeight > rect.height) y = y - tooltip.offsetHeight - 30;
-                        tooltip.style.left = x + 'px'; tooltip.style.top = y + 'px';
-                    });
-
-                    stockDiv.addEventListener('mouseout', () => { tooltip.style.opacity = 0; });
-                    gridDiv.appendChild(stockDiv);
-                });
-                catDiv.appendChild(gridDiv); zoomLayer.appendChild(catDiv);
-            });
-        }
-
-        // ========================================================
-        //  雲端同步 (JSONBlob)  ── 只同步「清單結構＋顏色模式」，
-        //  報價各裝置各自即時抓取，所以雲端資料很小、也不會頻繁寫入。
-        // ========================================================
-
-        // 取出要上雲的快照（不含即時報價）
-        function structureSnapshot() {
-            return {
-                app: 'heatmap', v: 8,
-                updatedAt: Date.now(),
-                colorMode: currentMode,
-                items: chartData
-                    .filter(d => d.type === 'root' || d.type === 'category' || d.type === 'stock')
-                    .map(d => ({ id: d.id, parent: d.parent, type: d.type }))
-            };
-        }
-
-        // 套用雲端快照（保留本機已抓到的報價，避免變空白）
-        function applySnapshot(snap) {
-            if (!snap || !Array.isArray(snap.items)) return false;
-            const oldMap = {};
-            chartData.forEach(d => { if (d.type === 'stock') oldMap[d.id] = d; });
-            const rebuilt = snap.items.map(it => {
-                if (it.type === 'stock') {
-                    const o = oldMap[it.id] || {};
-                    return {
-                        id: it.id, parent: it.parent, type: 'stock',
-                        change: (typeof o.change === 'number' ? o.change : 0),
-                        price: (o.price !== undefined ? o.price : null),
-                        currency: (o.currency || 'USD'),
-                        companyName: (o.companyName || '')
-                    };
-                }
-                return { id: it.id, parent: it.parent, type: it.type, change: 0 };
-            });
-            if (!rebuilt.find(d => d.type === 'root')) rebuilt.unshift({ id: 'ROOT', parent: '', type: 'root', change: 0 });
-            chartData = rebuilt;
-            if (snap.colorMode === 'US' || snap.colorMode === 'TW') { currentMode = snap.colorMode; updateColorModeButtonUI(); }
-            chartData.forEach(d => { if (d.type === 'category') expandedCategories.add(d.id); });
-            saveData();
-            return true;
-        }
-
-        function setCloudUI() {
-            const dot = document.getElementById('cloudDot');
-            const statusText = document.getElementById('cloudStatusText');
-            const setup = document.getElementById('cloudSetup');
-            const connected = document.getElementById('cloudConnected');
-            if (!dot) return;
-            if (syncBlobId) {
-                setup.classList.add('hidden');
-                connected.classList.remove('hidden');
-                document.getElementById('cloudCodeText').textContent = syncBlobId;
-                dot.className = "ml-auto inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500";
-                dot.title = "雲端同步已啟用";
-                statusText.textContent = "已啟用，變更會自動上傳、開啟時自動拉取";
-            } else {
-                setup.classList.remove('hidden');
-                connected.classList.add('hidden');
-                dot.className = "ml-auto inline-flex h-2.5 w-2.5 rounded-full bg-slate-500";
-                dot.title = "未連線";
-                statusText.textContent = "尚未啟用雲端同步";
-            }
-        }
-
-        function cloudFlash(busy) {
-            const dot = document.getElementById('cloudDot');
-            if (dot && syncBlobId) dot.style.opacity = busy ? '0.35' : '1';
-        }
-
-        // 建立新的雲端資料，取得同步碼
-        async function cloudEnable() {
-            const btn = document.getElementById('cloudEnableBtn');
-            btn.disabled = true; btn.textContent = '建立中…';
-            try {
-                const snap = structureSnapshot();
-                const res = await fetch(JSONBLOB_BASE, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify(snap)
-                });
-                if (!res.ok) throw new Error('伺服器回應 HTTP ' + res.status);
-                const loc = res.headers.get('Location');
-                if (!loc) throw new Error('無法讀取同步碼，請改用手動建立');
-                const id = loc.split('/').filter(Boolean).pop();
-                if (!id) throw new Error('同步碼格式異常');
-                syncBlobId = id;
-                lastStructureTs = snap.updatedAt;
-                localStorage.setItem(SYNC_ID_KEY, syncBlobId);
-                localStorage.setItem(STRUCT_TS_KEY, String(lastStructureTs));
-                setCloudUI();
-                showMessage('雲端同步已啟用！複製同步碼或連結到其他裝置即可');
-            } catch (err) {
-                showMessage('啟用失敗：' + err.message, true);
-            } finally {
-                btn.disabled = false; btn.textContent = '☁️ 啟用雲端同步（建立同步碼）';
-            }
-        }
-
-        // 用同步碼（或連結）連線到既有雲端資料
-        async function cloudJoin(idArg) {
-            const input = document.getElementById('cloudJoinInput');
-            let id = (idArg || (input ? input.value : '') || '').trim();
-            if (id.includes('sync=')) id = id.split('sync=').pop();
-            if (id.includes('/')) id = id.split('/').filter(Boolean).pop();
-            id = id.replace('#', '').trim();
-            if (!id) return showMessage('請貼上同步碼', true);
-            try {
-                const ok = await cloudPull(true, id);
-                if (ok) {
-                    syncBlobId = id;
-                    localStorage.setItem(SYNC_ID_KEY, syncBlobId);
-                    setCloudUI();
-                    if (input) input.value = '';
-                    showMessage('已連線並從雲端載入清單！');
-                    updateAll(); fetchRealTimeData(); closeDrawerIfMobile();
-                }
-            } catch (err) {
-                showMessage('連線失敗：' + err.message, true);
-            }
-        }
-
-        // 從雲端讀取；adopt=true 強制採用，否則只在雲端較新時採用
-        async function cloudPull(adopt, idOverride) {
-            const id = idOverride || syncBlobId;
-            if (!id) return false;
-            cloudFlash(true);
-            try {
-                const res = await fetch(JSONBLOB_BASE + '/' + id, { headers: { 'Accept': 'application/json' } });
-                if (res.status === 404) throw new Error('找不到此同步碼的資料');
-                if (!res.ok) throw new Error('伺服器回應 HTTP ' + res.status);
-                const snap = await res.json();
-                const remoteTs = snap.updatedAt || 0;
-                if (adopt || remoteTs > lastStructureTs) {
-                    applySnapshot(snap);
-                    lastStructureTs = remoteTs || Date.now();
-                    localStorage.setItem(STRUCT_TS_KEY, String(lastStructureTs));
-                    if (!adopt) { updateAll(); fetchRealTimeData(); }
-                    return true;
-                }
-                return false;
-            } finally {
-                cloudFlash(false);
-            }
-        }
-
-        // 結構有變動 → 立即更新本機時間戳，並延遲 0.7 秒批次上傳
-        function scheduleCloudPush() {
-            if (!syncBlobId) return;
-            lastStructureTs = Date.now();
-            localStorage.setItem(STRUCT_TS_KEY, String(lastStructureTs));
-            if (cloudPushTimer) clearTimeout(cloudPushTimer);
-            cloudPushTimer = setTimeout(cloudPush, 700);
-        }
-
-        async function cloudPush() {
-            if (!syncBlobId) return;
-            cloudFlash(true);
-            try {
-                const snap = structureSnapshot();
-                snap.updatedAt = lastStructureTs || Date.now();
-                const res = await fetch(JSONBLOB_BASE + '/' + syncBlobId, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify(snap)
-                });
-                if (!res.ok) throw new Error('伺服器回應 HTTP ' + res.status);
-            } catch (err) {
-                showMessage('雲端上傳失敗：' + err.message, true);
-            } finally {
-                cloudFlash(false);
-            }
-        }
-
-        async function cloudPullNow() {
-            if (!syncBlobId) return;
-            try {
-                const changed = await cloudPull(true);
-                showMessage(changed ? '已從雲端更新清單' : '雲端沒有資料變更');
-                updateAll(); fetchRealTimeData(); closeDrawerIfMobile();
-            } catch (err) { showMessage('拉取失敗：' + err.message, true); }
-        }
-
-        function cloudUnlink() {
-            if (!confirm('要中斷此裝置的雲端同步嗎？\n（雲端資料與其他裝置不受影響，本機清單會保留）')) return;
-            syncBlobId = null;
-            localStorage.removeItem(SYNC_ID_KEY);
-            setCloudUI();
-            showMessage('已中斷此裝置的雲端同步');
-        }
-
-        function cloudCopyCode() {
-            if (!syncBlobId) return;
-            navigator.clipboard?.writeText(syncBlobId)
-                .then(() => showMessage('已複製同步碼'))
-                .catch(() => showMessage('請手動複製：' + syncBlobId, true));
-        }
-
-        function cloudCopyLink() {
-            if (!syncBlobId) return;
-            const link = location.origin + location.pathname + '#sync=' + syncBlobId;
-            navigator.clipboard?.writeText(link)
-                .then(() => showMessage('已複製同步連結，在其他裝置開啟即可自動同步'))
-                .catch(() => showMessage('請手動複製：' + link, true));
-        }
-
         function parseSyncFromHash() {
             const m = location.hash.match(/sync=([A-Za-z0-9_-]+)/);
             return m ? m[1] : null;
         }
 
-        // 視窗大小變化時，若跨越行動版/電腦版分界就重新渲染
         let resizeTimer = null;
         window.addEventListener('resize', () => {
             if (resizeTimer) clearTimeout(resizeTimer);
@@ -987,13 +1031,12 @@
                 const nowMobile = window.matchMedia('(max-width: 768px)').matches;
                 if (nowMobile !== IS_MOBILE) {
                     IS_MOBILE = nowMobile;
-                    if (!IS_MOBILE) closeMobileSheet();
+                    if (!IS_MOBILE) { closeMobileSheet(); scale = 1; panX = 0; panY = 0; }
                     renderChart();
                 }
             }, 200);
         });
 
-        // 回到此分頁時，自動從雲端拉取其他裝置的最新變更
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden && syncBlobId) cloudPull(false).catch(() => {});
         });
@@ -1001,13 +1044,13 @@
         window.onload = async function() {
             loadData();
             setCloudUI();
-            if (IS_MOBILE) sidebar.classList.add('hidden'); // 手機預設收起抽屜，先看到熱力圖
+            if (IS_MOBILE) sidebar.classList.add('hidden'); 
 
             const hashId = parseSyncFromHash();
             if (hashId && hashId !== syncBlobId) {
-                await cloudJoin(hashId);          // 透過同步連結開啟 → 自動連線並載入
+                await cloudJoin(hashId);          
             } else if (syncBlobId) {
-                try { await cloudPull(true); } catch (e) { /* 離線則沿用本機資料 */ }
+                try { await cloudPull(true); } catch (e) {}
                 setCloudUI();
             }
 
