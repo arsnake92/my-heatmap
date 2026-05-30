@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自選即時熱力圖</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            overflow: hidden;
+        }
+        
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        #tooltip {
+            position: absolute;
+            opacity: 0;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid #334155;
+            padding: 12px;
+            border-radius: 8px;
+            pointer-events: none;
+            font-size: 0.875rem;
+            z-index: 100;
+            transition: opacity 0.2s, transform 0.1s;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            min-width: 200px;
+        }
+
+        .grab-cursor { cursor: grab; }
+        .grabbing-cursor { cursor: grabbing !important; }
+    </style>
+</head>
+<body class="h-screen flex flex-col">
+
+    <header class="bg-slate-800 border-b border-slate-700 py-3 px-4 md:px-6 flex flex-col md:flex-row justify-between items-center gap-4 shadow-md z-20 relative">
+        <div class="flex items-center gap-3">
+            <button onclick="toggleSidebar()" class="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-200 transition-colors" title="收合/展開側邊欄">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+            </button>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="text-xl md:text-2xl font-bold bg-gradient-to-r from-blue-400 to-teal-400 bg-clip-text text-transparent">自選即時熱力圖</h1>
+                    <span id="syncBadge" class="flex h-3 w-3 relative hidden">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                    </span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex flex-wrap items-center gap-3 bg-slate-900/60 p-2 md:p-3 rounded-xl border border-slate-700/60">
+            <div class="flex items-center gap-2">
+                <span id="updateTimeText" class="text-xs font-mono text-slate-400">尚未更新數據</span>
+            </div>
+            <div class="h-4 w-px bg-slate-700 hidden sm:block"></div>
+            <div class="flex items-center gap-3">
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="autoUpdateToggle" class="sr-only peer" checked>
+                    <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-500"></div>
+                    <span class="ml-2 text-xs text-slate-300 font-medium hidden sm:inline">自動同步 (60s)</span>
+                </label>
+                <button id="refreshBtn" onclick="fetchRealTimeData()" class="flex items-center gap-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold py-1.5 px-3 rounded-lg shadow transition-all active:scale-95">
+                    <svg id="refreshIcon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H17"></path></svg>
+                    立即重整
+                </button>
+                <button id="colorModeBtn" class="bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold py-1.5 px-3 rounded-lg shadow transition-colors border border-slate-600">
+                    台股 (紅漲綠跌)
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 flex overflow-hidden relative">
+        <aside id="sidebar" class="w-full lg:w-96 bg-slate-800/80 border-r border-slate-700 flex flex-col overflow-y-auto no-scrollbar transition-all duration-300 relative z-10 flex-shrink-0">
+            <!-- 新增群組 -->
+            <div class="p-4 border-b border-slate-700">
+                <h2 class="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                    新增分群 (Category)
+                </h2>
+                <div class="space-y-2">
+                    <input type="text" id="catName" placeholder="群組名稱 (如: 科技股)" class="w-full bg-slate-900 border border-slate-600 rounded p-1.5 text-sm focus:outline-none focus:border-blue-500">
+                    <button onclick="addCategory()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-1.5 rounded transition-colors text-xs">
+                        + 新增分群
+                    </button>
+                </div>
+            </div>
+
+            <!-- 新增股票 -->
+            <div class="p-4 border-b border-slate-700">
+                <h2 class="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                    新增股票 (Stock)
+                </h2>
+                <div class="space-y-2">
+                    <div class="grid grid-cols-2 gap-2">
+                        <input type="text" id="stockName" placeholder="代號 (如 AAPL, 2330)" class="col-span-1 bg-slate-900 border border-slate-600 rounded p-1.5 text-sm focus:outline-none focus:border-teal-500">
+                        <select id="stockParent" class="col-span-1 bg-slate-900 border border-slate-600 rounded p-1.5 text-sm focus:outline-none focus:border-teal-500"></select>
+                    </div>
+                    <button onclick="addStock()" class="w-full bg-teal-600 hover:bg-teal-500 text-white font-medium py-1.5 rounded transition-colors text-xs">
+                        + 新增股票
+                    </button>
+                </div>
+            </div>
+
+            <!-- 資料管理 -->
+            <div class="p-4 flex-1">
+                <h2 class="text-sm font-semibold mb-3">資料清單管理 (點擊展開)</h2>
+                <div id="dataList" class="space-y-2 pb-10"></div>
+            </div>
+        </aside>
+
+        <section class="flex-1 bg-slate-950 relative overflow-hidden" id="chartWrapper">
+            <div id="messageBox" class="hidden absolute top-4 left-1/2 -translate-x-1/2 bg-slate-800 border border-slate-600 text-white px-4 py-2 rounded-lg shadow-xl z-50 text-sm flex items-center gap-2 transition-opacity duration-300">
+                <span id="messageText"></span>
+            </div>
+
+            <div class="w-full h-full grab-cursor relative overflow-hidden" id="treemapContainer">
+                <div id="zoomLayer" class="absolute origin-top-left flex flex-wrap gap-5 p-6 items-start content-start transition-transform duration-75 min-w-[1000px] min-h-[800px]">
+                </div>
+                <div id="emptyState" class="absolute inset-0 flex items-center justify-center text-slate-500 hidden pointer-events-none">
+                    查無資料，請從左側新增。
+                </div>
+            </div>
+
+            <!-- 縮放按鈕 -->
+            <div class="absolute bottom-6 right-6 flex flex-col gap-1.5 bg-slate-800/90 p-1.5 rounded-lg border border-slate-700 shadow-xl backdrop-blur z-20">
+                <button onclick="controlZoom(0.1)" class="p-2 hover:bg-slate-700 rounded text-slate-200 transition-colors" title="放大">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                </button>
+                <div class="w-full h-px bg-slate-700"></div>
+                <button onclick="resetZoom()" class="p-2 hover:bg-slate-700 rounded text-slate-200 transition-colors" title="重設大小與位置">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+                </button>
+                <div class="w-full h-px bg-slate-700"></div>
+                <button onclick="controlZoom(-0.1)" class="p-2 hover:bg-slate-700 rounded text-slate-200 transition-colors" title="縮小">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path></svg>
+                </button>
+            </div>
+        </section>
+    </main>
+
+    <div id="tooltip"></div>
+
+    <script>
+        const defaultChartData = [
+            { id: "ROOT", parent: "", type: "root", change: 0 },
+            { id: "科技巨頭", parent: "ROOT", type: "category", change: 0 },
+            { id: "半導體與 AI", parent: "ROOT", type: "category", change: 0 },
+            { id: "台股 ETF", parent: "ROOT", type: "category", change: 0 },
+            
+            { id: "AAPL", parent: "科技巨頭", type: "stock", change: 1.25, price: null, currency: 'USD', companyName: '' },
+            { id: "MSFT", parent: "科技巨頭", type: "stock", change: 0.50, price: null, currency: 'USD', companyName: '' },
+            { id: "GOOG", parent: "科技巨頭", type: "stock", change: -0.80, price: null, currency: 'USD', companyName: '' },
+            { id: "AMZN", parent: "科技巨頭", type: "stock", change: 2.10, price: null, currency: 'USD', companyName: '' },
+
+            { id: "NVDA", parent: "半導體與 AI", type: "stock", change: -2.40, price: null, currency: 'USD', companyName: '' },
+            { id: "TSM", parent: "半導體與 AI", type: "stock", change: 1.80, price: null, currency: 'USD', companyName: '' },
+            { id: "AMD", parent: "半導體與 AI", type: "stock", change: 3.20, price: null, currency: 'USD', companyName: '' },
+            { id: "AVGO", parent: "半導體與 AI", type: "stock", change: -1.20, price: null, currency: 'USD', companyName: '' },
+            { id: "QCOM", parent: "半導體與 AI", type: "stock", change: 0.40, price: null, currency: 'USD', companyName: '' },
+            
+            { id: "2330", parent: "台股 ETF", type: "stock", change: 2.10, price: null, currency: 'TWD', companyName: '' },
+            { id: "2454", parent: "台股 ETF", type: "stock", change: -1.50, price: null, currency: 'TWD', companyName: '' },
+            { id: "0050", parent: "台股 ETF", type: "stock", change: -0.15, price: null, currency: 'TWD', companyName: '' }
+        ];
+
+        let chartData = [];
+        let currentMode = 'US'; 
+        const workerApiUrl = 'https://aged-cloud-8fb4.arthur920616.workers.dev'; 
+        let updateIntervalId = null;
+        let isFetching = false;
+        
+        let expandedCategories = new Set();
+        let isFirstLoad = true;
+
+        const container = document.getElementById('treemapContainer');
+        const zoomLayer = document.getElementById('zoomLayer');
+        const tooltip = document.getElementById('tooltip');
+        const colorModeBtn = document.getElementById('colorModeBtn');
+        const autoUpdateToggle = document.getElementById('autoUpdateToggle');
+        const sidebar = document.getElementById('sidebar');
+
+        function toggleSidebar() { sidebar.classList.toggle('hidden'); }
+
+        let scale = 1, panX = 0, panY = 0;
+        let isPanning = false, startMouseX = 0, startMouseY = 0;
+
+        function updateTransform() { zoomLayer.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`; }
+
+        function controlZoom(delta) {
+            const rect = container.getBoundingClientRect();
+            applyZoom(delta > 0 ? 1.2 : 0.8, rect.width / 2, rect.height / 2);
+        }
+
+        function resetZoom() { scale = 1; panX = 0; panY = 0; updateTransform(); }
+
+        function applyZoom(multiplier, pointerX, pointerY) {
+            const newScale = Math.max(0.2, Math.min(scale * multiplier, 5)); 
+            panX = pointerX - (pointerX - panX) * (newScale / scale);
+            panY = pointerY - (pointerY - panY) * (newScale / scale);
+            scale = newScale; updateTransform();
+        }
+
+        container.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const rect = container.getBoundingClientRect();
+            applyZoom(e.deltaY < 0 ? 1.1 : 0.9, e.clientX - rect.left, e.clientY - rect.top);
+        });
+
+        container.addEventListener('mousedown', (e) => {
+            if (e.target.closest('button')) return;
+            isPanning = true; startMouseX = e.clientX - panX; startMouseY = e.clientY - panY;
+            container.classList.add('grabbing-cursor');
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isPanning) return;
+            panX = e.clientX - startMouseX; panY = e.clientY - startMouseY; updateTransform();
+        });
+
+        window.addEventListener('mouseup', () => { isPanning = false; container.classList.remove('grabbing-cursor'); });
+
+        function loadData() {
+            const savedData = localStorage.getItem('custom_heatmap_data_v8');
+            const savedMode = localStorage.getItem('custom_heatmap_color_mode_v8');
+            
+            if (savedData) { try { chartData = JSON.parse(savedData); } catch(e) { chartData = [...defaultChartData]; } } 
+            else { chartData = [...defaultChartData]; }
+            
+            if (savedMode) { currentMode = savedMode; updateColorModeButtonUI(); }
+            
+            if (isFirstLoad) { chartData.forEach(d => { if(d.type === 'category') expandedCategories.add(d.id); }); isFirstLoad = false; }
+        }
+
+        function saveData() {
+            localStorage.setItem('custom_heatmap_data_v8', JSON.stringify(chartData));
+            localStorage.setItem('custom_heatmap_color_mode_v8', currentMode);
+        }
+
+        function showMessage(msg, isError = false) {
+            const box = document.getElementById('messageBox');
+            const text = document.getElementById('messageText');
+            text.innerHTML = isError ? `⚠️ ${msg}` : `✅ ${msg}`;
+            box.classList.remove('hidden'); box.style.opacity = 1;
+            setTimeout(() => { box.style.opacity = 0; setTimeout(() => box.classList.add('hidden'), 3500); }, 3500);
+        }
+
+        function updateDropdowns() {
+            const stockParentSelect = document.getElementById('stockParent');
+            let optionsHTML = '';
+            chartData.filter(d => d.type === 'category').forEach(cat => { optionsHTML += `<option value="${cat.id}">${cat.id}</option>`; });
+            if(stockParentSelect) stockParentSelect.innerHTML = optionsHTML;
+        }
+
+        function toggleCategoryList(catId) { expandedCategories.has(catId) ? expandedCategories.delete(catId) : expandedCategories.add(catId); renderDataList(); }
+
+        function renderDataList() {
+            const listContainer = document.getElementById('dataList'); listContainer.innerHTML = '';
+            const categories = chartData.filter(d => d.type === 'category');
+            const stocks = chartData.filter(d => d.type === 'stock');
+
+            categories.forEach(cat => {
+                const catStocks = stocks.filter(s => s.parent === cat.id);
+                const isExpanded = expandedCategories.has(cat.id);
+                const chevronIcon = isExpanded ? `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>` : `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>`;
+
+                let html = `
+                    <div class="mb-2 bg-slate-900 border border-slate-700 rounded overflow-hidden">
+                        <div class="flex justify-between items-center bg-slate-800 p-2 cursor-pointer hover:bg-slate-700 transition-colors" onclick="toggleCategoryList('${cat.id}')">
+                            <div class="flex items-center gap-2">
+                                <svg class="w-4 h-4 text-slate-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">${chevronIcon}</svg>
+                                <span class="text-sm font-bold text-blue-200">${cat.id}</span>
+                                <span class="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded-full">${catStocks.length} 檔</span>
+                            </div>
+                            <div class="flex gap-1" onclick="event.stopPropagation()">
+                                <button onclick="editCategory('${cat.id}')" class="text-slate-400 hover:text-blue-400 p-1" title="編輯分群名稱"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg></button>
+                                <button onclick="deleteItem('${cat.id}')" class="text-slate-400 hover:text-red-400 p-1" title="刪除分群"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                            </div>
+                        </div>
+                        <div class="${isExpanded ? 'block' : 'hidden'} bg-slate-900 p-2 space-y-1.5 border-t border-slate-700">
+                `;
+
+                if (catStocks.length === 0) { html += `<div class="text-xs text-slate-500 italic px-2 py-1">尚無股票，請從上方新增</div>`; } 
+                else {
+                    catStocks.forEach(stock => {
+                        html += `
+                            <div class="flex justify-between items-center bg-slate-800/60 px-2 py-1.5 rounded border border-slate-700/50 hover:bg-slate-700/80 transition-colors">
+                                <div class="flex-1 flex justify-between pr-3 items-center">
+                                    <span class="text-xs font-bold">${stock.id}</span>
+                                    <span class="text-[10px] font-mono font-semibold" style="color: ${getChangeColor(stock.change)}">${stock.change >= 0 ? '+' : ''}${stock.change}%</span>
+                                </div>
+                                <div class="flex gap-1 border-l border-slate-700 pl-1">
+                                    <button onclick="editStock('${stock.id}')" class="text-slate-400 hover:text-teal-400 p-1" title="修改股號"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg></button>
+                                    <button onclick="deleteItem('${stock.id}')" class="text-slate-400 hover:text-red-400 p-1" title="刪除"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+                html += `</div></div>`; listContainer.insertAdjacentHTML('beforeend', html);
+            });
+        }
+
+        function editCategory(oldId) {
+            const newName = prompt(`請輸入「${oldId}」的新名稱：`, oldId);
+            if (!newName || newName.trim() === "" || newName.trim() === oldId) return;
+            if (chartData.find(d => d.id === newName.trim())) return showMessage("該分群名稱已存在！", true);
+            const cat = chartData.find(d => d.id === oldId && d.type === 'category');
+            if (cat) cat.id = newName.trim();
+            chartData.forEach(d => { if (d.parent === oldId) d.parent = newName.trim(); });
+            if (expandedCategories.has(oldId)) { expandedCategories.delete(oldId); expandedCategories.add(newName.trim()); }
+            showMessage(`分群名稱已更新為：${newName.trim()}`); saveData(); updateAll();
+        }
+
+        function editStock(oldId) {
+            const stock = chartData.find(d => d.id === oldId && d.type === 'stock');
+            if (!stock) return;
+            const newId = prompt(`修改股票代號（原代號：${oldId}）：\n※ 台股請直接輸入數字代碼`, oldId);
+            if (!newId || newId.trim() === "" || newId.trim().toUpperCase() === oldId) return;
+            if (chartData.find(d => d.id === newId.trim().toUpperCase())) return showMessage("該股票代號已存在清單中！", true);
+            stock.id = newId.trim().toUpperCase(); stock.price = null; stock.change = 0; stock.companyName = ""; stock.currency = "USD";
+            showMessage(`股票代號已更新，正在重新抓取報價...`); saveData(); updateAll(); fetchRealTimeData();
+        }
+
+        function addCategory() {
+            const name = document.getElementById('catName').value.trim();
+            if (!name) return showMessage('請輸入群組名稱', true);
+            if (chartData.find(d => d.id === name)) return showMessage('該名稱已存在', true);
+            chartData.push({ id: name, parent: "ROOT", type: 'category', change: 0 });
+            expandedCategories.add(name); document.getElementById('catName').value = '';
+            showMessage(`已新增群組: ${name}`); saveData(); updateAll();
+        }
+
+        function addStock() {
+            const name = document.getElementById('stockName').value.trim().toUpperCase();
+            const parent = document.getElementById('stockParent').value;
+            const change = 0; // 預設漲跌幅為 0
+            if (!name || !parent) return showMessage('請輸入完整且正確的資料', true);
+            
+            const existingIndex = chartData.findIndex(d => d.id === name);
+            if (existingIndex >= 0) {
+                if(chartData[existingIndex].type !== 'stock') return showMessage('名稱衝突', true);
+                chartData[existingIndex] = { ...chartData[existingIndex], parent: parent, change: change };
+                showMessage(`已更新股票歸屬: ${name}`);
+            } else {
+                chartData.push({ id: name, parent: parent, type: 'stock', change: change, price: null, currency: 'USD', companyName: '' });
+                showMessage(`已新增股票: ${name}`);
+            }
+            expandedCategories.add(parent); document.getElementById('stockName').value = '';
+            saveData(); updateAll(); fetchRealTimeData();
+        }
+
+        function deleteItem(id) {
+            if (id === 'ROOT') return showMessage('無法刪除根節點', true);
+            let idsToDelete = new Set([id]), added = true;
+            while(added) {
+                added = false;
+                chartData.forEach(d => { if (idsToDelete.has(d.parent) && !idsToDelete.has(d.id)) { idsToDelete.add(d.id); added = true; } });
+            }
+            chartData = chartData.filter(d => !idsToDelete.has(d.id));
+            showMessage(`已刪除 ${id}`); saveData(); updateAll();
+        }
+
+        async function fetchRealTimeData() {
+            if (isFetching) return;
+            
+            isFetching = true; toggleRefreshUI(true);
+
+            const stocks = chartData.filter(d => d.type === 'stock');
+            if (stocks.length === 0) { isFetching = false; toggleRefreshUI(false); return; }
+
+            const symbolsQuery = stocks.map(s => /^\d+$/.test(s.id) ? s.id + ".TW" : s.id).join(',');
+            const fetchUrl = `${workerApiUrl}?symbols=${symbolsQuery}`;
+
+            try {
+                const res = await fetch(fetchUrl);
+                const rawText = await res.text();
+                
+                if (!res.ok) {
+                    throw new Error(`伺服器或 Yahoo 阻擋 (HTTP ${res.status})`);
+                }
+                
+                let data;
+                try {
+                    data = JSON.parse(rawText);
+                } catch (e) {
+                    throw new Error("Yahoo 回傳了無法解析的資料格式");
+                }
+                
+                if (data && data.quoteResponse && data.quoteResponse.result) {
+                    const quoteMap = {};
+                    data.quoteResponse.result.forEach(q => { quoteMap[q.symbol.toUpperCase()] = q; });
+
+                    chartData.forEach(d => {
+                        if (d.type === 'stock') {
+                            let querySymbol = d.id.toUpperCase();
+                            if (/^\d+$/.test(querySymbol)) querySymbol += ".TW";
+                            const quote = quoteMap[querySymbol];
+                            if (quote) {
+                                d.change = parseFloat((quote.regularMarketChangePercent || 0).toFixed(2));
+                                d.price = parseFloat((quote.regularMarketPrice || 0).toFixed(2));
+                                d.currency = quote.currency || 'USD';
+                                d.companyName = quote.longName || quote.shortName || '';
+                            }
+                        }
+                    });
+                    saveData(); updateAll();
+                    document.getElementById('updateTimeText').textContent = `更新時間: ${new Date().toLocaleTimeString()}`;
+                    showMessage("即時數據同步成功！");
+                } else throw new Error("無效的資料內容結構");
+            } catch (err) {
+                console.warn("API 連線失敗，啟用模擬:", err);
+                document.getElementById('updateTimeText').textContent = `連線失敗，請檢查網路`;
+                showMessage(`連線發生錯誤：${err.message}`, true);
+            } finally { isFetching = false; toggleRefreshUI(false); }
+        }
+
+        function toggleRefreshUI(loading) {
+            const btn = document.getElementById('refreshBtn'), icon = document.getElementById('refreshIcon'), badge = document.getElementById('syncBadge');
+            if (loading) { icon.classList.add('animate-spin'); btn.classList.add('opacity-75'); btn.disabled = true; badge.classList.remove('hidden'); } 
+            else { icon.classList.remove('animate-spin'); btn.classList.remove('opacity-75'); btn.disabled = false; }
+        }
+
+        function handleAutoUpdateSetup() {
+            if (updateIntervalId) { clearInterval(updateIntervalId); updateIntervalId = null; }
+            if (autoUpdateToggle.checked) {
+                document.getElementById('syncBadge').classList.remove('hidden');
+                updateIntervalId = setInterval(() => { fetchRealTimeData(); }, 60000);
+            } else document.getElementById('syncBadge').classList.add('hidden');
+        }
+
+        autoUpdateToggle.addEventListener('change', handleAutoUpdateSetup);
+
+        function updateAll() { updateDropdowns(); renderDataList(); renderTreemap(); }
+
+        function getChangeColor(change) {
+            return currentMode === 'US' 
+                ? d3.scaleLinear().domain([-5, 0, 5]).range(["#dc2626", "#475569", "#16a34a"]).clamp(true)(change)
+                : d3.scaleLinear().domain([-5, 0, 5]).range(["#16a34a", "#475569", "#dc2626"]).clamp(true)(change);
+        }
+
+        function updateColorModeButtonUI() {
+            if (currentMode === 'US') {
+                colorModeBtn.textContent = '美股 (綠漲紅跌)';
+                colorModeBtn.classList.replace('bg-red-700', 'bg-slate-700'); colorModeBtn.classList.replace('border-red-600', 'border-slate-600');
+            } else {
+                colorModeBtn.textContent = '台股 (紅漲綠跌)';
+                colorModeBtn.classList.replace('bg-slate-700', 'bg-red-700'); colorModeBtn.classList.replace('border-slate-600', 'border-red-600');
+            }
+        }
+
+        colorModeBtn.addEventListener('click', () => { currentMode = currentMode === 'US' ? 'TW' : 'US'; updateColorModeButtonUI(); saveData(); renderTreemap(); });
+
+        function renderTreemap() {
+            zoomLayer.innerHTML = ''; 
+            const stocks = chartData.filter(d => d.type === 'stock');
+            if (stocks.length === 0) { document.getElementById('emptyState').classList.remove('hidden'); return; }
+            document.getElementById('emptyState').classList.add('hidden');
+
+            chartData.filter(d => d.type === 'category').forEach(cat => {
+                const catStocks = chartData.filter(d => d.type === 'stock' && d.parent === cat.id);
+                if (catStocks.length === 0) return;
+
+                const totalChange = catStocks.reduce((sum, stock) => sum + stock.change, 0);
+                const avgChange = (totalChange / catStocks.length).toFixed(2);
+                const avgColor = getChangeColor(avgChange);
+                const cols = Math.ceil(Math.sqrt(catStocks.length));
+
+                const catDiv = document.createElement('div');
+                catDiv.className = "bg-slate-900 border-2 rounded-xl overflow-hidden shadow-2xl flex flex-col transition-all mb-2"; 
+                catDiv.style.borderColor = avgColor;
+
+                const header = document.createElement('div');
+                header.className = "px-3 py-2 bg-slate-800 border-b-2 flex items-center justify-between";
+                header.style.borderBottomColor = avgColor;
+                header.innerHTML = `
+                    <span class="text-slate-100 font-bold text-[13px] tracking-wide">${cat.id}</span>
+                    <span class="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-black/40 shadow-inner" style="color: ${avgColor}">
+                        ${avgChange > 0 ? '+' : ''}${avgChange}%
+                    </span>
+                `;
+                catDiv.appendChild(header);
+
+                const gridDiv = document.createElement('div');
+                gridDiv.className = "p-1.5 grid gap-1";
+                gridDiv.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+
+                catStocks.forEach(stock => {
+                    const stockDiv = document.createElement('div');
+                    stockDiv.className = "w-[54px] h-[54px] rounded-md flex flex-col items-center justify-center cursor-pointer transition-transform hover:scale-110 hover:z-10 relative border border-black/20 shadow-sm";
+                    stockDiv.style.backgroundColor = getChangeColor(stock.change);
+
+                    stockDiv.innerHTML = `
+                        <span class="text-white font-bold text-[11px] truncate w-full text-center px-0.5 pointer-events-none">${stock.id}</span>
+                        <span class="text-white/95 font-mono text-[9px] font-medium mt-0.5 pointer-events-none">${stock.change > 0 ? '+' : ''}${stock.change}%</span>
+                    `;
+
+                    stockDiv.addEventListener('mousemove', (event) => {
+                        const rect = container.getBoundingClientRect();
+                        tooltip.style.opacity = 1;
+                        
+                        const priceDisplay = stock.price ? `<span class="font-mono text-white text-base">${stock.price}</span> <span class="text-xs text-slate-400">${stock.currency}</span>` : `<span class="text-slate-400 italic">無報價資料</span>`;
+                        const companyNameText = stock.companyName || '（擷取中 / 無公司名稱）';
+
+                        tooltip.innerHTML = `
+                            <div class="font-bold text-lg mb-0.5 flex items-center gap-2"><span>${stock.id}</span><span class="text-xs px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 font-normal border border-slate-600">${cat.id}</span></div>
+                            <div class="text-[11px] text-blue-200 mb-2 font-medium opacity-90 truncate max-w-[250px]">${companyNameText}</div>
+                            <div class="space-y-1 text-xs text-slate-300"><div>目前價格: ${priceDisplay}</div></div>
+                            <div class="mt-2.5 pt-1.5 border-t border-slate-700 flex items-center justify-between"><span class="text-[11px] text-slate-400">今日漲跌:</span><span class="text-base font-mono font-bold" style="color: ${getChangeColor(stock.change)}">${stock.change > 0 ? '+' : ''}${stock.change}%</span></div>
+                        `;
+                        
+                        let x = event.clientX - rect.left + 15;
+                        let y = event.clientY - rect.top + 15;
+                        if (x + tooltip.offsetWidth > rect.width) x = x - tooltip.offsetWidth - 30;
+                        if (y + tooltip.offsetHeight > rect.height) y = y - tooltip.offsetHeight - 30;
+                        tooltip.style.left = x + 'px'; tooltip.style.top = y + 'px';
+                    });
+
+                    stockDiv.addEventListener('mouseout', () => { tooltip.style.opacity = 0; });
+                    gridDiv.appendChild(stockDiv);
+                });
+                catDiv.appendChild(gridDiv); zoomLayer.appendChild(catDiv);
+            });
+        }
+
+        window.onload = function() { loadData(); updateAll(); handleAutoUpdateSetup(); fetchRealTimeData(); };
+    </script>
+</body>
+</html>
