@@ -36,6 +36,76 @@
 
         .grab-cursor { cursor: grab; }
         .grabbing-cursor { cursor: grabbing !important; }
+
+        /* ===================================================================
+           行動版優化：以下規則「只在 ≤768px 的窄螢幕生效」，
+           電腦版（>768px）完全不會套用，排版與操作維持原樣。
+           =================================================================== */
+        @media (max-width: 768px) {
+            body { overscroll-behavior-y: contain; }
+
+            /* 熱力圖改為「直向自然捲動」，停用電腦版的拖曳/滾輪縮放畫布 */
+            #treemapContainer {
+                overflow-y: auto !important;
+                overflow-x: hidden !important;
+                -webkit-overflow-scrolling: touch;
+                cursor: default !important;
+            }
+            #zoomLayer {
+                position: static !important;
+                transform: none !important;
+                min-width: 0 !important;
+                min-height: 0 !important;
+                width: 100% !important;
+                display: flex !important;
+                flex-direction: column !important;
+                flex-wrap: nowrap !important;
+                gap: 0.75rem !important;
+                padding: 0.75rem !important;
+            }
+
+            /* 隱藏電腦版專用的縮放控制鈕（手機用原生捲動即可） */
+            #zoomControls { display: none !important; }
+
+            /* 側邊欄在手機上 = 全螢幕滑出抽屜 */
+            #sidebar {
+                position: fixed !important;
+                inset: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                z-index: 50 !important;
+                border-right: none !important;
+                box-shadow: 0 0 50px rgba(0,0,0,.7);
+            }
+            #sidebar.hidden { display: none !important; }
+
+            /* header 觸控優化：按鈕加大、間距加寬 */
+            header { padding-top: .6rem; padding-bottom: .6rem; }
+            #refreshBtn, #colorModeBtn { padding-top: .5rem; padding-bottom: .5rem; font-size: .8rem; }
+            #autoUpdateToggle ~ span { display: inline; }
+        }
+
+        /* 行動版股票詳情面板（手機點擊個股時滑出；電腦版滑鼠 hover 仍用原本的 tooltip，不會觸發這個） */
+        #mobileSheetBackdrop {
+            position: fixed; inset: 0; background: rgba(0,0,0,.55);
+            z-index: 59; opacity: 0; pointer-events: none; transition: opacity .25s;
+            backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+        }
+        #mobileSheetBackdrop.show { opacity: 1; pointer-events: auto; }
+        #mobileSheet {
+            position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+            background: #1e293b; border-top: 1px solid #334155;
+            border-radius: 20px 20px 0 0;
+            padding: 18px 18px calc(20px + env(safe-area-inset-bottom, 0px));
+            transform: translateY(115%);
+            transition: transform .3s cubic-bezier(.22,1,.36,1);
+            box-shadow: 0 -12px 34px rgba(0,0,0,.55);
+        }
+        #mobileSheet.show { transform: translateY(0); }
+        #mobileSheet .grabber {
+            width: 42px; height: 4px; border-radius: 999px; background: #475569;
+            margin: -4px auto 14px;
+        }
     </style>
 </head>
 <body class="h-screen flex flex-col">
@@ -80,6 +150,56 @@
 
     <main class="flex-1 flex overflow-hidden relative">
         <aside id="sidebar" class="w-full lg:w-96 bg-slate-800/80 border-r border-slate-700 flex flex-col overflow-y-auto no-scrollbar transition-all duration-300 relative z-10 flex-shrink-0">
+            <!-- 手機版抽屜頂部（電腦版以 md:hidden 隱藏，不影響電腦版） -->
+            <div class="md:hidden flex items-center justify-between p-4 border-b border-slate-700 sticky top-0 bg-slate-800 z-10">
+                <span class="text-sm font-semibold text-slate-200">設定與清單管理</span>
+                <button onclick="toggleSidebar()" class="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-200" title="關閉">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <!-- 雲端同步 (JSONBlob) -->
+            <div class="p-4 border-b border-slate-700">
+                <h2 class="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg>
+                    雲端同步 (跨裝置)
+                    <span id="cloudDot" class="ml-auto inline-flex h-2.5 w-2.5 rounded-full bg-slate-500" title="未連線"></span>
+                </h2>
+                <div id="cloudStatusText" class="text-[11px] text-slate-400 mb-2">尚未啟用雲端同步</div>
+
+                <!-- 尚未連線：啟用 / 輸入同步碼 -->
+                <div id="cloudSetup" class="space-y-2">
+                    <button id="cloudEnableBtn" onclick="cloudEnable()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2 rounded transition-colors text-xs">
+                        ☁️ 啟用雲端同步（建立同步碼）
+                    </button>
+                    <div class="flex items-center gap-2">
+                        <div class="h-px flex-1 bg-slate-700"></div>
+                        <span class="text-[10px] text-slate-500">或在新裝置輸入同步碼</span>
+                        <div class="h-px flex-1 bg-slate-700"></div>
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="text" id="cloudJoinInput" placeholder="貼上同步碼或連結" class="flex-1 bg-slate-900 border border-slate-600 rounded p-1.5 text-sm focus:outline-none focus:border-emerald-500">
+                        <button onclick="cloudJoin()" class="bg-slate-700 hover:bg-slate-600 text-white font-medium px-3 rounded text-xs whitespace-nowrap">連線</button>
+                    </div>
+                </div>
+
+                <!-- 已連線：顯示同步碼與操作 -->
+                <div id="cloudConnected" class="space-y-2 hidden">
+                    <div class="bg-slate-900 border border-slate-700 rounded p-2">
+                        <div class="text-[10px] text-slate-400 mb-1">你的同步碼（在其他裝置貼上即可同步）</div>
+                        <div class="flex items-center gap-2">
+                            <code id="cloudCodeText" class="flex-1 text-[11px] text-emerald-300 font-mono break-all leading-tight"></code>
+                            <button onclick="cloudCopyCode()" class="text-slate-300 hover:text-white p-1 flex-shrink-0" title="複製同步碼"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg></button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="cloudCopyLink()" class="bg-blue-600 hover:bg-blue-500 text-white font-medium py-1.5 rounded text-xs">🔗 複製同步連結</button>
+                        <button onclick="cloudPullNow()" class="bg-slate-700 hover:bg-slate-600 text-white font-medium py-1.5 rounded text-xs">↻ 立即拉取</button>
+                    </div>
+                    <button onclick="cloudUnlink()" class="w-full text-red-400 hover:text-red-300 text-[11px] py-1">中斷此裝置的同步</button>
+                </div>
+            </div>
+
             <!-- 新增群組 -->
             <div class="p-4 border-b border-slate-700">
                 <h2 class="text-sm font-semibold mb-2 flex items-center gap-2">
@@ -132,7 +252,7 @@
             </div>
 
             <!-- 縮放按鈕 -->
-            <div class="absolute bottom-6 right-6 flex flex-col gap-1.5 bg-slate-800/90 p-1.5 rounded-lg border border-slate-700 shadow-xl backdrop-blur z-20">
+            <div id="zoomControls" class="absolute bottom-6 right-6 flex flex-col gap-1.5 bg-slate-800/90 p-1.5 rounded-lg border border-slate-700 shadow-xl backdrop-blur z-20">
                 <button onclick="controlZoom(0.1)" class="p-2 hover:bg-slate-700 rounded text-slate-200 transition-colors" title="放大">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
                 </button>
@@ -149,6 +269,13 @@
     </main>
 
     <div id="tooltip"></div>
+
+    <!-- 行動版股票詳情面板（手機點擊個股顯示；電腦版維持 hover tooltip，不會觸發） -->
+    <div id="mobileSheetBackdrop" onclick="closeMobileSheet()"></div>
+    <div id="mobileSheet">
+        <div class="grabber"></div>
+        <div id="mobileSheetContent"></div>
+    </div>
 
     <script>
         const defaultChartData = [
@@ -189,6 +316,17 @@
         const autoUpdateToggle = document.getElementById('autoUpdateToggle');
         const sidebar = document.getElementById('sidebar');
 
+        // ===== 裝置判斷（行動版 / 電腦版）=====
+        let IS_MOBILE = window.matchMedia('(max-width: 768px)').matches;
+
+        // ===== 雲端同步 (JSONBlob) 狀態 =====
+        const JSONBLOB_BASE = 'https://jsonblob.com/api/jsonBlob';
+        const SYNC_ID_KEY = 'custom_heatmap_sync_id_v8';
+        const STRUCT_TS_KEY = 'custom_heatmap_struct_ts_v8';
+        let syncBlobId = localStorage.getItem(SYNC_ID_KEY) || null;
+        let lastStructureTs = parseInt(localStorage.getItem(STRUCT_TS_KEY) || '0', 10);
+        let cloudPushTimer = null;
+
         function toggleSidebar() { sidebar.classList.toggle('hidden'); }
 
         let scale = 1, panX = 0, panY = 0;
@@ -211,12 +349,14 @@
         }
 
         container.addEventListener('wheel', (e) => {
+            if (IS_MOBILE) return; // 行動版用原生捲動，不攔截
             e.preventDefault();
             const rect = container.getBoundingClientRect();
             applyZoom(e.deltaY < 0 ? 1.1 : 0.9, e.clientX - rect.left, e.clientY - rect.top);
         });
 
         container.addEventListener('mousedown', (e) => {
+            if (IS_MOBILE) return; // 行動版用原生捲動
             if (e.target.closest('button')) return;
             isPanning = true; startMouseX = e.clientX - panX; startMouseY = e.clientY - panY;
             container.classList.add('grabbing-cursor');
@@ -318,7 +458,7 @@
             if (cat) cat.id = newName.trim();
             chartData.forEach(d => { if (d.parent === oldId) d.parent = newName.trim(); });
             if (expandedCategories.has(oldId)) { expandedCategories.delete(oldId); expandedCategories.add(newName.trim()); }
-            showMessage(`分群名稱已更新為：${newName.trim()}`); saveData(); updateAll();
+            showMessage(`分群名稱已更新為：${newName.trim()}`); saveData(); updateAll(); scheduleCloudPush();
         }
 
         function editStock(oldId) {
@@ -328,7 +468,7 @@
             if (!newId || newId.trim() === "" || newId.trim().toUpperCase() === oldId) return;
             if (chartData.find(d => d.id === newId.trim().toUpperCase())) return showMessage("該股票代號已存在清單中！", true);
             stock.id = newId.trim().toUpperCase(); stock.price = null; stock.change = 0; stock.companyName = ""; stock.currency = "USD";
-            showMessage(`股票代號已更新，正在重新抓取報價...`); saveData(); updateAll(); fetchRealTimeData();
+            showMessage(`股票代號已更新，正在重新抓取報價...`); saveData(); updateAll(); scheduleCloudPush(); fetchRealTimeData();
         }
 
         function addCategory() {
@@ -337,7 +477,7 @@
             if (chartData.find(d => d.id === name)) return showMessage('該名稱已存在', true);
             chartData.push({ id: name, parent: "ROOT", type: 'category', change: 0 });
             expandedCategories.add(name); document.getElementById('catName').value = '';
-            showMessage(`已新增群組: ${name}`); saveData(); updateAll();
+            showMessage(`已新增群組: ${name}`); saveData(); updateAll(); scheduleCloudPush();
         }
 
         function addStock() {
@@ -356,7 +496,7 @@
                 showMessage(`已新增股票: ${name}`);
             }
             expandedCategories.add(parent); document.getElementById('stockName').value = '';
-            saveData(); updateAll(); fetchRealTimeData();
+            saveData(); updateAll(); scheduleCloudPush(); fetchRealTimeData(); closeDrawerIfMobile();
         }
 
         function deleteItem(id) {
@@ -367,7 +507,7 @@
                 chartData.forEach(d => { if (idsToDelete.has(d.parent) && !idsToDelete.has(d.id)) { idsToDelete.add(d.id); added = true; } });
             }
             chartData = chartData.filter(d => !idsToDelete.has(d.id));
-            showMessage(`已刪除 ${id}`); saveData(); updateAll();
+            showMessage(`已刪除 ${id}`); saveData(); updateAll(); scheduleCloudPush();
         }
 
         async function fetchRealTimeData() {
@@ -434,13 +574,109 @@
             if (updateIntervalId) { clearInterval(updateIntervalId); updateIntervalId = null; }
             if (autoUpdateToggle.checked) {
                 document.getElementById('syncBadge').classList.remove('hidden');
-                updateIntervalId = setInterval(() => { fetchRealTimeData(); }, 60000);
+                updateIntervalId = setInterval(() => {
+                    if (syncBlobId) { cloudPull(false).catch(() => {}); }
+                    fetchRealTimeData();
+                }, 60000);
             } else document.getElementById('syncBadge').classList.add('hidden');
         }
 
         autoUpdateToggle.addEventListener('change', handleAutoUpdateSetup);
 
-        function updateAll() { updateDropdowns(); renderDataList(); renderTreemap(); }
+        function updateAll() { updateDropdowns(); renderDataList(); renderChart(); }
+
+        // 渲染分流：電腦版走原本的 renderTreemap（完全不變），行動版走 renderTreemapMobile
+        function renderChart() { IS_MOBILE ? renderTreemapMobile() : renderTreemap(); }
+
+        // ===== 行動版熱力圖：直向堆疊、響應式格子、放大點擊區、點擊看詳情 =====
+        function renderTreemapMobile() {
+            zoomLayer.innerHTML = '';
+            const stocks = chartData.filter(d => d.type === 'stock');
+            const emptyEl = document.getElementById('emptyState');
+            if (stocks.length === 0) { emptyEl.classList.remove('hidden'); return; }
+            emptyEl.classList.add('hidden');
+
+            chartData.filter(d => d.type === 'category').forEach(cat => {
+                const catStocks = chartData.filter(d => d.type === 'stock' && d.parent === cat.id);
+                if (catStocks.length === 0) return;
+
+                const avgChange = (catStocks.reduce((s, x) => s + x.change, 0) / catStocks.length).toFixed(2);
+                const avgColor = getChangeColor(avgChange);
+
+                const catDiv = document.createElement('div');
+                catDiv.className = "bg-slate-900 border rounded-xl overflow-hidden shadow-lg w-full";
+                catDiv.style.borderColor = avgColor;
+
+                const header = document.createElement('div');
+                header.className = "px-3 py-2.5 bg-slate-800 border-b flex items-center justify-between";
+                header.style.borderBottomColor = avgColor;
+                header.innerHTML = `
+                    <span class="text-slate-100 font-bold text-sm tracking-wide">${cat.id}</span>
+                    <span class="font-mono text-xs font-bold px-2 py-0.5 rounded bg-black/40" style="color: ${avgColor}">${avgChange > 0 ? '+' : ''}${avgChange}%</span>
+                `;
+                catDiv.appendChild(header);
+
+                const grid = document.createElement('div');
+                grid.className = "p-2 grid gap-1.5";
+                grid.style.gridTemplateColumns = "repeat(auto-fill, minmax(72px, 1fr))";
+
+                catStocks.forEach(stock => {
+                    const tile = document.createElement('button');
+                    tile.type = "button";
+                    tile.className = "aspect-square rounded-lg flex flex-col items-center justify-center active:scale-95 transition-transform relative border border-black/20 shadow-sm";
+                    tile.style.backgroundColor = getChangeColor(stock.change);
+                    tile.innerHTML = `
+                        <span class="text-white font-bold text-xs truncate w-full text-center px-1 pointer-events-none">${stock.id}</span>
+                        <span class="text-white/95 font-mono text-[10px] font-medium mt-0.5 pointer-events-none">${stock.change > 0 ? '+' : ''}${stock.change}%</span>
+                    `;
+                    tile.addEventListener('click', () => openMobileSheet(stock, cat.id));
+                    grid.appendChild(tile);
+                });
+                catDiv.appendChild(grid);
+                zoomLayer.appendChild(catDiv);
+            });
+        }
+
+        function openMobileSheet(stock, catId) {
+            const c = document.getElementById('mobileSheetContent');
+            const col = getChangeColor(stock.change);
+            const priceDisplay = stock.price
+                ? `${stock.price} <span class="text-xs text-slate-400">${stock.currency || ''}</span>`
+                : `<span class="text-slate-400 italic text-base">無報價資料</span>`;
+            c.innerHTML = `
+                <div class="flex items-start justify-between gap-3 mb-3">
+                    <div>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-2xl font-bold">${stock.id}</span>
+                            <span class="text-[11px] px-2 py-0.5 rounded bg-slate-700 text-slate-300 border border-slate-600">${catId}</span>
+                        </div>
+                        <div class="text-xs text-blue-200 mt-1 opacity-90">${stock.companyName || '（無公司名稱）'}</div>
+                    </div>
+                    <button onclick="closeMobileSheet()" class="p-2 -mr-2 -mt-1 text-slate-400 hover:text-white flex-shrink-0">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="bg-slate-900 rounded-lg p-3 border border-slate-700">
+                        <div class="text-[11px] text-slate-400 mb-1">目前價格</div>
+                        <div class="font-mono text-lg">${priceDisplay}</div>
+                    </div>
+                    <div class="bg-slate-900 rounded-lg p-3 border border-slate-700">
+                        <div class="text-[11px] text-slate-400 mb-1">今日漲跌</div>
+                        <div class="font-mono text-lg font-bold" style="color: ${col}">${stock.change > 0 ? '+' : ''}${stock.change}%</div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('mobileSheet').classList.add('show');
+            document.getElementById('mobileSheetBackdrop').classList.add('show');
+        }
+
+        function closeMobileSheet() {
+            document.getElementById('mobileSheet').classList.remove('show');
+            document.getElementById('mobileSheetBackdrop').classList.remove('show');
+        }
+
+        function closeDrawerIfMobile() { if (IS_MOBILE) sidebar.classList.add('hidden'); }
 
         function getChangeColor(change) {
             return currentMode === 'US' 
@@ -458,7 +694,7 @@
             }
         }
 
-        colorModeBtn.addEventListener('click', () => { currentMode = currentMode === 'US' ? 'TW' : 'US'; updateColorModeButtonUI(); saveData(); renderTreemap(); });
+        colorModeBtn.addEventListener('click', () => { currentMode = currentMode === 'US' ? 'TW' : 'US'; updateColorModeButtonUI(); saveData(); renderChart(); scheduleCloudPush(); });
 
         function renderTreemap() {
             zoomLayer.innerHTML = ''; 
@@ -532,7 +768,253 @@
             });
         }
 
-        window.onload = function() { loadData(); updateAll(); handleAutoUpdateSetup(); fetchRealTimeData(); };
+        // ========================================================
+        //  雲端同步 (JSONBlob)  ── 只同步「清單結構＋顏色模式」，
+        //  報價各裝置各自即時抓取，所以雲端資料很小、也不會頻繁寫入。
+        // ========================================================
+
+        // 取出要上雲的快照（不含即時報價）
+        function structureSnapshot() {
+            return {
+                app: 'heatmap', v: 8,
+                updatedAt: Date.now(),
+                colorMode: currentMode,
+                items: chartData
+                    .filter(d => d.type === 'root' || d.type === 'category' || d.type === 'stock')
+                    .map(d => ({ id: d.id, parent: d.parent, type: d.type }))
+            };
+        }
+
+        // 套用雲端快照（保留本機已抓到的報價，避免變空白）
+        function applySnapshot(snap) {
+            if (!snap || !Array.isArray(snap.items)) return false;
+            const oldMap = {};
+            chartData.forEach(d => { if (d.type === 'stock') oldMap[d.id] = d; });
+            const rebuilt = snap.items.map(it => {
+                if (it.type === 'stock') {
+                    const o = oldMap[it.id] || {};
+                    return {
+                        id: it.id, parent: it.parent, type: 'stock',
+                        change: (typeof o.change === 'number' ? o.change : 0),
+                        price: (o.price !== undefined ? o.price : null),
+                        currency: (o.currency || 'USD'),
+                        companyName: (o.companyName || '')
+                    };
+                }
+                return { id: it.id, parent: it.parent, type: it.type, change: 0 };
+            });
+            if (!rebuilt.find(d => d.type === 'root')) rebuilt.unshift({ id: 'ROOT', parent: '', type: 'root', change: 0 });
+            chartData = rebuilt;
+            if (snap.colorMode === 'US' || snap.colorMode === 'TW') { currentMode = snap.colorMode; updateColorModeButtonUI(); }
+            chartData.forEach(d => { if (d.type === 'category') expandedCategories.add(d.id); });
+            saveData();
+            return true;
+        }
+
+        function setCloudUI() {
+            const dot = document.getElementById('cloudDot');
+            const statusText = document.getElementById('cloudStatusText');
+            const setup = document.getElementById('cloudSetup');
+            const connected = document.getElementById('cloudConnected');
+            if (!dot) return;
+            if (syncBlobId) {
+                setup.classList.add('hidden');
+                connected.classList.remove('hidden');
+                document.getElementById('cloudCodeText').textContent = syncBlobId;
+                dot.className = "ml-auto inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500";
+                dot.title = "雲端同步已啟用";
+                statusText.textContent = "已啟用，變更會自動上傳、開啟時自動拉取";
+            } else {
+                setup.classList.remove('hidden');
+                connected.classList.add('hidden');
+                dot.className = "ml-auto inline-flex h-2.5 w-2.5 rounded-full bg-slate-500";
+                dot.title = "未連線";
+                statusText.textContent = "尚未啟用雲端同步";
+            }
+        }
+
+        function cloudFlash(busy) {
+            const dot = document.getElementById('cloudDot');
+            if (dot && syncBlobId) dot.style.opacity = busy ? '0.35' : '1';
+        }
+
+        // 建立新的雲端資料，取得同步碼
+        async function cloudEnable() {
+            const btn = document.getElementById('cloudEnableBtn');
+            btn.disabled = true; btn.textContent = '建立中…';
+            try {
+                const snap = structureSnapshot();
+                const res = await fetch(JSONBLOB_BASE, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify(snap)
+                });
+                if (!res.ok) throw new Error('伺服器回應 HTTP ' + res.status);
+                const loc = res.headers.get('Location');
+                if (!loc) throw new Error('無法讀取同步碼，請改用手動建立');
+                const id = loc.split('/').filter(Boolean).pop();
+                if (!id) throw new Error('同步碼格式異常');
+                syncBlobId = id;
+                lastStructureTs = snap.updatedAt;
+                localStorage.setItem(SYNC_ID_KEY, syncBlobId);
+                localStorage.setItem(STRUCT_TS_KEY, String(lastStructureTs));
+                setCloudUI();
+                showMessage('雲端同步已啟用！複製同步碼或連結到其他裝置即可');
+            } catch (err) {
+                showMessage('啟用失敗：' + err.message, true);
+            } finally {
+                btn.disabled = false; btn.textContent = '☁️ 啟用雲端同步（建立同步碼）';
+            }
+        }
+
+        // 用同步碼（或連結）連線到既有雲端資料
+        async function cloudJoin(idArg) {
+            const input = document.getElementById('cloudJoinInput');
+            let id = (idArg || (input ? input.value : '') || '').trim();
+            if (id.includes('sync=')) id = id.split('sync=').pop();
+            if (id.includes('/')) id = id.split('/').filter(Boolean).pop();
+            id = id.replace('#', '').trim();
+            if (!id) return showMessage('請貼上同步碼', true);
+            try {
+                const ok = await cloudPull(true, id);
+                if (ok) {
+                    syncBlobId = id;
+                    localStorage.setItem(SYNC_ID_KEY, syncBlobId);
+                    setCloudUI();
+                    if (input) input.value = '';
+                    showMessage('已連線並從雲端載入清單！');
+                    updateAll(); fetchRealTimeData(); closeDrawerIfMobile();
+                }
+            } catch (err) {
+                showMessage('連線失敗：' + err.message, true);
+            }
+        }
+
+        // 從雲端讀取；adopt=true 強制採用，否則只在雲端較新時採用
+        async function cloudPull(adopt, idOverride) {
+            const id = idOverride || syncBlobId;
+            if (!id) return false;
+            cloudFlash(true);
+            try {
+                const res = await fetch(JSONBLOB_BASE + '/' + id, { headers: { 'Accept': 'application/json' } });
+                if (res.status === 404) throw new Error('找不到此同步碼的資料');
+                if (!res.ok) throw new Error('伺服器回應 HTTP ' + res.status);
+                const snap = await res.json();
+                const remoteTs = snap.updatedAt || 0;
+                if (adopt || remoteTs > lastStructureTs) {
+                    applySnapshot(snap);
+                    lastStructureTs = remoteTs || Date.now();
+                    localStorage.setItem(STRUCT_TS_KEY, String(lastStructureTs));
+                    if (!adopt) { updateAll(); fetchRealTimeData(); }
+                    return true;
+                }
+                return false;
+            } finally {
+                cloudFlash(false);
+            }
+        }
+
+        // 結構有變動 → 立即更新本機時間戳，並延遲 0.7 秒批次上傳
+        function scheduleCloudPush() {
+            if (!syncBlobId) return;
+            lastStructureTs = Date.now();
+            localStorage.setItem(STRUCT_TS_KEY, String(lastStructureTs));
+            if (cloudPushTimer) clearTimeout(cloudPushTimer);
+            cloudPushTimer = setTimeout(cloudPush, 700);
+        }
+
+        async function cloudPush() {
+            if (!syncBlobId) return;
+            cloudFlash(true);
+            try {
+                const snap = structureSnapshot();
+                snap.updatedAt = lastStructureTs || Date.now();
+                const res = await fetch(JSONBLOB_BASE + '/' + syncBlobId, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify(snap)
+                });
+                if (!res.ok) throw new Error('伺服器回應 HTTP ' + res.status);
+            } catch (err) {
+                showMessage('雲端上傳失敗：' + err.message, true);
+            } finally {
+                cloudFlash(false);
+            }
+        }
+
+        async function cloudPullNow() {
+            if (!syncBlobId) return;
+            try {
+                const changed = await cloudPull(true);
+                showMessage(changed ? '已從雲端更新清單' : '雲端沒有資料變更');
+                updateAll(); fetchRealTimeData(); closeDrawerIfMobile();
+            } catch (err) { showMessage('拉取失敗：' + err.message, true); }
+        }
+
+        function cloudUnlink() {
+            if (!confirm('要中斷此裝置的雲端同步嗎？\n（雲端資料與其他裝置不受影響，本機清單會保留）')) return;
+            syncBlobId = null;
+            localStorage.removeItem(SYNC_ID_KEY);
+            setCloudUI();
+            showMessage('已中斷此裝置的雲端同步');
+        }
+
+        function cloudCopyCode() {
+            if (!syncBlobId) return;
+            navigator.clipboard?.writeText(syncBlobId)
+                .then(() => showMessage('已複製同步碼'))
+                .catch(() => showMessage('請手動複製：' + syncBlobId, true));
+        }
+
+        function cloudCopyLink() {
+            if (!syncBlobId) return;
+            const link = location.origin + location.pathname + '#sync=' + syncBlobId;
+            navigator.clipboard?.writeText(link)
+                .then(() => showMessage('已複製同步連結，在其他裝置開啟即可自動同步'))
+                .catch(() => showMessage('請手動複製：' + link, true));
+        }
+
+        function parseSyncFromHash() {
+            const m = location.hash.match(/sync=([A-Za-z0-9_-]+)/);
+            return m ? m[1] : null;
+        }
+
+        // 視窗大小變化時，若跨越行動版/電腦版分界就重新渲染
+        let resizeTimer = null;
+        window.addEventListener('resize', () => {
+            if (resizeTimer) clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+                const nowMobile = window.matchMedia('(max-width: 768px)').matches;
+                if (nowMobile !== IS_MOBILE) {
+                    IS_MOBILE = nowMobile;
+                    if (!IS_MOBILE) closeMobileSheet();
+                    renderChart();
+                }
+            }, 200);
+        });
+
+        // 回到此分頁時，自動從雲端拉取其他裝置的最新變更
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && syncBlobId) cloudPull(false).catch(() => {});
+        });
+
+        window.onload = async function() {
+            loadData();
+            setCloudUI();
+            if (IS_MOBILE) sidebar.classList.add('hidden'); // 手機預設收起抽屜，先看到熱力圖
+
+            const hashId = parseSyncFromHash();
+            if (hashId && hashId !== syncBlobId) {
+                await cloudJoin(hashId);          // 透過同步連結開啟 → 自動連線並載入
+            } else if (syncBlobId) {
+                try { await cloudPull(true); } catch (e) { /* 離線則沿用本機資料 */ }
+                setCloudUI();
+            }
+
+            updateAll();
+            handleAutoUpdateSetup();
+            fetchRealTimeData();
+        };
     </script>
 </body>
 </html>
