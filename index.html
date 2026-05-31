@@ -216,7 +216,7 @@
                     新增分群 (Category)
                 </h2>
                 <div class="space-y-2">
-                    <input type="text" id="catName" placeholder="群組名稱 (如: 科技股)" class="w-full bg-slate-900 border border-slate-600 rounded p-1.5 text-sm focus:outline-none focus:border-blue-500">
+                    <input type="text" id="catName" onkeydown="if(event.key==='Enter') addCategory()" placeholder="群組名稱 (如: 科技股)" class="w-full bg-slate-900 border border-slate-600 rounded p-1.5 text-sm focus:outline-none focus:border-blue-500">
                     <button onclick="addCategory()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-1.5 rounded transition-colors text-xs">
                         + 新增分群
                     </button>
@@ -231,9 +231,9 @@
                 </h2>
                 <div class="space-y-2">
                     <div class="grid grid-cols-2 gap-2">
-                        <input type="text" id="stockName" placeholder="代號 (如 AAPL, 2330)" class="col-span-1 bg-slate-900 border border-slate-600 rounded p-1.5 text-sm focus:outline-none focus:border-teal-500">
-                        <select id="stockParent" class="col-span-1 bg-slate-900 border border-slate-600 rounded p-1.5 text-sm focus:outline-none focus:border-teal-500"></select>
-                    </div>
+    <input type="text" id="stockName" onkeydown="if(event.key==='Enter') addStock()" placeholder="代號 (如 AAPL, 2330)" class="col-span-1 bg-slate-900 border border-slate-600 rounded p-1.5 text-sm focus:outline-none focus:border-teal-500">
+    <select id="stockParent" onkeydown="if(event.key==='Enter') addStock()" class="col-span-1 bg-slate-900 border border-slate-600 rounded p-1.5 text-sm focus:outline-none focus:border-teal-500"></select>
+</div>
                     <button onclick="addStock()" class="w-full bg-teal-600 hover:bg-teal-500 text-white font-medium py-1.5 rounded transition-colors text-xs">
                         + 新增股票
                     </button>
@@ -525,11 +525,16 @@
         }
 
         function updateDropdowns() {
-            const stockParentSelect = document.getElementById('stockParent');
-            let optionsHTML = '';
-            chartData.filter(d => d.type === 'category').forEach(cat => { optionsHTML += `<option value="${cat.id}">${cat.id}</option>`; });
-            if(stockParentSelect) stockParentSelect.innerHTML = optionsHTML;
-        }
+    const stockParentSelect = document.getElementById('stockParent');
+    if (!stockParentSelect) return;
+    
+    const currentSelection = stockParentSelect.value; // 1. 先記住目前的選項
+    let optionsHTML = '';
+    chartData.filter(d => d.type === 'category').forEach(cat => { optionsHTML += `<option value="${cat.id}">${cat.id}</option>`; });
+    stockParentSelect.innerHTML = optionsHTML;
+    
+    if (currentSelection) stockParentSelect.value = currentSelection; // 2. 重新塞回剛才記住的選項
+}
 
         function toggleCategoryList(catId) { expandedCategories.has(catId) ? expandedCategories.delete(catId) : expandedCategories.add(catId); renderDataList(); }
 
@@ -602,13 +607,17 @@
         }
 
         function addCategory() {
-            const name = document.getElementById('catName').value.trim();
-            if (!name) return showMessage('請輸入群組名稱', true);
-            if (chartData.find(d => d.id === name)) return showMessage('該名稱已存在', true);
-            chartData.push({ id: name, parent: "ROOT", type: 'category', change: 0 });
-            expandedCategories.add(name); document.getElementById('catName').value = '';
-            showMessage(`已新增群組: ${name}`); saveData(); updateAll(); scheduleCloudPush();
-        }
+    const name = document.getElementById('catName').value.trim();
+    if (!name) return showMessage('請輸入群組名稱', true);
+    if (chartData.find(d => d.id === name)) return showMessage('該名稱已存在', true);
+    chartData.push({ id: name, parent: "ROOT", type: 'category', change: 0 });
+    expandedCategories.add(name); document.getElementById('catName').value = '';
+    showMessage(`已新增群組: ${name}`); saveData(); updateAll(); scheduleCloudPush();
+    
+    // 👇 新增這兩行：加入新群組後，自動將下拉選單切換過去
+    const stockParentSelect = document.getElementById('stockParent');
+    if (stockParentSelect) stockParentSelect.value = name;
+}
 
         function addStock() {
             const name = document.getElementById('stockName').value.trim().toUpperCase();
