@@ -123,13 +123,24 @@
                 <span id="updateTimeText" class="text-xs font-mono text-slate-400">尚未更新數據</span>
             </div>
             <div class="h-4 w-px bg-slate-700 hidden sm:block"></div>
+            <!-- 顯示週期切換：當日 / 一週 / 兩週 / 一月 -->
+            <div class="flex items-center gap-1.5">
+                <span class="text-[11px] text-slate-400 font-medium hidden sm:inline">週期</span>
+                <div id="periodSelector" class="flex items-center gap-0.5 bg-slate-800/80 p-0.5 rounded-lg border border-slate-700/60">
+                    <button data-period="1d"  onclick="setPeriod('1d')"  class="period-btn text-xs font-medium px-2.5 py-1 rounded-md transition-colors">當日</button>
+                    <button data-period="1wk" onclick="setPeriod('1wk')" class="period-btn text-xs font-medium px-2.5 py-1 rounded-md transition-colors">一週</button>
+                    <button data-period="2wk" onclick="setPeriod('2wk')" class="period-btn text-xs font-medium px-2.5 py-1 rounded-md transition-colors">兩週</button>
+                    <button data-period="1mo" onclick="setPeriod('1mo')" class="period-btn text-xs font-medium px-2.5 py-1 rounded-md transition-colors">一月</button>
+                </div>
+            </div>
+            <div class="h-4 w-px bg-slate-700 hidden sm:block"></div>
             <div class="flex items-center gap-3">
                 <label class="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" id="autoUpdateToggle" class="sr-only peer" checked>
                     <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-500"></div>
                     <span class="ml-2 text-xs text-slate-300 font-medium hidden sm:inline">自動同步 (60s)</span>
                 </label>
-                <button id="refreshBtn" onclick="fetchRealTimeData()" class="flex items-center gap-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold py-1.5 px-3 rounded-lg shadow transition-all active:scale-95">
+                <button id="refreshBtn" onclick="refreshData()" class="flex items-center gap-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold py-1.5 px-3 rounded-lg shadow transition-all active:scale-95">
                     <svg id="refreshIcon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H17"></path></svg>
                     立即重整
                 </button>
@@ -152,43 +163,49 @@
 
             <!-- 雲端同步 (JSONBlob) -->
             <div class="p-4 border-b border-slate-700">
-                <h2 class="text-sm font-semibold mb-2 flex items-center gap-2">
+                <!-- 標題列可點擊：展開 / 收起整個雲端同步區塊 -->
+                <h2 id="cloudHeader" onclick="toggleCloudPanel()" class="text-sm font-semibold mb-2 flex items-center gap-2 cursor-pointer select-none" title="點此展開 / 收起雲端同步">
                     <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg>
                     雲端同步 (跨裝置)
                     <span id="cloudDot" class="ml-auto inline-flex h-2.5 w-2.5 rounded-full bg-slate-500" title="未連線"></span>
+                    <svg id="cloudChevron" class="w-4 h-4 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                 </h2>
-                <div id="cloudStatusText" class="text-[11px] text-slate-400 mb-2">尚未啟用雲端同步</div>
 
-                <!-- 尚未連線：啟用 / 輸入同步碼 -->
-                <div id="cloudSetup" class="space-y-2">
-                    <button id="cloudEnableBtn" onclick="cloudEnable()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2 rounded transition-colors text-xs">
-                        ☁️ 啟用雲端同步（建立同步碼）
-                    </button>
-                    <div class="flex items-center gap-2">
-                        <div class="h-px flex-1 bg-slate-700"></div>
-                        <span class="text-[10px] text-slate-500">或在新裝置輸入同步碼</span>
-                        <div class="h-px flex-1 bg-slate-700"></div>
-                    </div>
-                    <div class="flex gap-2">
-                        <input type="text" id="cloudJoinInput" placeholder="貼上同步碼或連結" class="flex-1 bg-slate-900 border border-slate-600 rounded p-1.5 text-sm focus:outline-none focus:border-emerald-500">
-                        <button onclick="cloudJoin()" class="bg-slate-700 hover:bg-slate-600 text-white font-medium px-3 rounded text-xs whitespace-nowrap">連線</button>
-                    </div>
-                </div>
+                <!-- 可收合的內容區（連線後會自動收起） -->
+                <div id="cloudBody">
+                    <div id="cloudStatusText" class="text-[11px] text-slate-400 mb-2">尚未啟用雲端同步</div>
 
-                <!-- 已連線：顯示同步碼與操作 -->
-                <div id="cloudConnected" class="space-y-2 hidden">
-                    <div class="bg-slate-900 border border-slate-700 rounded p-2">
-                        <div class="text-[10px] text-slate-400 mb-1">你的同步碼（在其他裝置貼上即可同步）</div>
+                    <!-- 尚未連線：啟用 / 輸入同步碼 -->
+                    <div id="cloudSetup" class="space-y-2">
+                        <button id="cloudEnableBtn" onclick="cloudEnable()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2 rounded transition-colors text-xs">
+                            ☁️ 啟用雲端同步（建立同步碼）
+                        </button>
                         <div class="flex items-center gap-2">
-                            <code id="cloudCodeText" class="flex-1 text-[11px] text-emerald-300 font-mono break-all leading-tight"></code>
-                            <button onclick="cloudCopyCode()" class="text-slate-300 hover:text-white p-1 flex-shrink-0" title="複製同步碼"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg></button>
+                            <div class="h-px flex-1 bg-slate-700"></div>
+                            <span class="text-[10px] text-slate-500">或在新裝置輸入同步碼</span>
+                            <div class="h-px flex-1 bg-slate-700"></div>
+                        </div>
+                        <div class="flex gap-2">
+                            <input type="text" id="cloudJoinInput" placeholder="貼上同步碼或連結" class="flex-1 bg-slate-900 border border-slate-600 rounded p-1.5 text-sm focus:outline-none focus:border-emerald-500">
+                            <button onclick="cloudJoin()" class="bg-slate-700 hover:bg-slate-600 text-white font-medium px-3 rounded text-xs whitespace-nowrap">連線</button>
                         </div>
                     </div>
-                    <div class="grid grid-cols-2 gap-2">
-                        <button onclick="cloudCopyLink()" class="bg-blue-600 hover:bg-blue-500 text-white font-medium py-1.5 rounded text-xs">🔗 複製同步連結</button>
-                        <button onclick="cloudPullNow()" class="bg-slate-700 hover:bg-slate-600 text-white font-medium py-1.5 rounded text-xs">↻ 立即拉取</button>
+
+                    <!-- 已連線：顯示同步碼與操作 -->
+                    <div id="cloudConnected" class="space-y-2 hidden">
+                        <div class="bg-slate-900 border border-slate-700 rounded p-2">
+                            <div class="text-[10px] text-slate-400 mb-1">你的同步碼（在其他裝置貼上即可同步）</div>
+                            <div class="flex items-center gap-2">
+                                <code id="cloudCodeText" class="flex-1 text-[11px] text-emerald-300 font-mono break-all leading-tight"></code>
+                                <button onclick="cloudCopyCode()" class="text-slate-300 hover:text-white p-1 flex-shrink-0" title="複製同步碼"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg></button>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="cloudCopyLink()" class="bg-blue-600 hover:bg-blue-500 text-white font-medium py-1.5 rounded text-xs">🔗 複製同步連結</button>
+                            <button onclick="cloudPullNow()" class="bg-slate-700 hover:bg-slate-600 text-white font-medium py-1.5 rounded text-xs">↻ 立即拉取</button>
+                        </div>
+                        <button onclick="cloudUnlink()" class="w-full text-red-400 hover:text-red-300 text-[11px] py-1">中斷此裝置的同步</button>
                     </div>
-                    <button onclick="cloudUnlink()" class="w-full text-red-400 hover:text-red-300 text-[11px] py-1">中斷此裝置的同步</button>
                 </div>
             </div>
 
@@ -297,6 +314,19 @@
         const workerApiUrl = 'https://aged-cloud-8fb4.arthur920616.workers.dev'; 
         let updateIntervalId = null;
         let isFetching = false;
+
+        // ===== 顯示週期（當日 / 一週 / 兩週 / 一月）=====
+        const PERIOD_KEY = 'custom_heatmap_period_v8';
+        const PERIODS = {
+            '1d':  { label: '當日漲跌', short: '當日', days: 0  },
+            '1wk': { label: '一週漲跌', short: '一週', days: 7  },
+            '2wk': { label: '兩週漲跌', short: '兩週', days: 14 },
+            '1mo': { label: '一月漲跌', short: '一月', days: 30 },
+        };
+        let currentPeriod = localStorage.getItem(PERIOD_KEY) || '1d';
+        if (!PERIODS[currentPeriod]) currentPeriod = '1d';
+        let isFetchingHist = false;
+        const histCache = {}; // symbol -> { date:'YYYY-MM-DD', periods:{'1wk','2wk','1mo'} }
         
         let expandedCategories = new Set();
         let isFirstLoad = true;
@@ -319,6 +349,27 @@
         let syncBlobId = localStorage.getItem(SYNC_ID_KEY) || null;
         let lastStructureTs = parseInt(localStorage.getItem(STRUCT_TS_KEY) || '0', 10);
         let cloudPushTimer = null;
+
+        // ===== 雲端同步面板收合狀態（連線後自動收起，狀態會被記住）=====
+        const CLOUD_COLLAPSE_KEY = 'custom_heatmap_cloud_collapsed_v8';
+        let cloudCollapsed = localStorage.getItem(CLOUD_COLLAPSE_KEY) === '1';
+
+        function applyCloudCollapse() {
+            const body = document.getElementById('cloudBody');
+            const chevron = document.getElementById('cloudChevron');
+            if (body) body.classList.toggle('hidden', cloudCollapsed);
+            if (chevron) chevron.style.transform = cloudCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+        }
+
+        function setCloudCollapsed(collapsed) {
+            cloudCollapsed = collapsed;
+            localStorage.setItem(CLOUD_COLLAPSE_KEY, collapsed ? '1' : '0');
+            applyCloudCollapse();
+        }
+
+        function toggleCloudPanel() {
+            setCloudCollapsed(!cloudCollapsed);
+        }
 
         // 同步一律走 Worker 代理（可靠、無 CORS 問題）
         function usingProxy() { return true; }
@@ -589,6 +640,137 @@
             showMessage(`已刪除 ${id}`); saveData(); updateAll(); scheduleCloudPush();
         }
 
+        // ====== 顯示週期：切換 / 套用 / 抓取歷史收盤 ======
+        function periodLabel() { return (PERIODS[currentPeriod] || PERIODS['1d']).label; }
+
+        function updatePeriodUI() {
+            document.querySelectorAll('#periodSelector .period-btn').forEach(btn => {
+                const active = btn.dataset.period === currentPeriod;
+                btn.classList.toggle('bg-blue-600', active);
+                btn.classList.toggle('text-white', active);
+                btn.classList.toggle('shadow', active);
+                btn.classList.toggle('text-slate-300', !active);
+                btn.classList.toggle('hover:bg-slate-700', !active);
+            });
+        }
+
+        // 把每檔股票「目前顯示的 change」設成所選週期的值（其餘渲染程式只讀 d.change，故不需更動）
+        function applyPeriod(render = true, allowFetch = true) {
+            chartData.forEach(d => {
+                if (d.type !== 'stock') return;
+                if (!d._periods) d._periods = {};
+                const v = d._periods[currentPeriod];
+                d.change = (typeof v === 'number' && isFinite(v)) ? parseFloat(v.toFixed(2)) : 0;
+            });
+            updatePeriodUI();
+            if (render) updateAll();
+            if (allowFetch && currentPeriod !== '1d') {
+                const need = chartData.some(d => d.type === 'stock' && (!d._periods || typeof d._periods[currentPeriod] !== 'number'));
+                if (need) fetchHistoricalData();
+            }
+        }
+
+        function setPeriod(p) {
+            if (!PERIODS[p]) return;
+            currentPeriod = p;
+            localStorage.setItem(PERIOD_KEY, p);
+            applyPeriod();
+        }
+
+        function toSymbol(id) {
+            const s = id.toUpperCase();
+            return /^\d+$/.test(s) ? s + '.TW' : s;
+        }
+
+        // 抓單一股票近 3 個月日線（先走 Worker 代理，失敗再試 Yahoo 直連）
+        async function fetchOneChart(symbol) {
+            const range = '3mo', interval = '1d';
+            const urls = [
+                `${workerApiUrl}?chart=${encodeURIComponent(symbol)}&range=${range}&interval=${interval}`,
+                `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`,
+                `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`,
+            ];
+            for (const u of urls) {
+                try {
+                    const res = await fetch(u);
+                    if (!res.ok) continue;
+                    const json = await res.json();
+                    const r = json && json.chart && json.chart.result && json.chart.result[0];
+                    if (r && r.timestamp && r.indicators && r.indicators.quote && r.indicators.quote[0] && r.indicators.quote[0].close) return r;
+                } catch (e) { /* 換下一個來源 */ }
+            }
+            return null;
+        }
+
+        // 由日線收盤計算「N 個日曆天前 → 今天」的漲跌幅
+        function pctFromCloses(timestamps, closes, lookbackDays) {
+            if (lookbackDays <= 0) return null;
+            let lastI = closes.length - 1;
+            while (lastI >= 0 && closes[lastI] == null) lastI--;
+            if (lastI < 1) return null;
+            const last = closes[lastI];
+            const targetTs = timestamps[lastI] - lookbackDays * 86400;
+            let baseI = -1;
+            for (let i = lastI - 1; i >= 0; i--) {
+                if (closes[i] != null && timestamps[i] <= targetTs) { baseI = i; break; }
+            }
+            if (baseI < 0) { // 歷史不足 → 用最早一筆有效收盤
+                for (let i = 0; i < lastI; i++) { if (closes[i] != null) { baseI = i; break; } }
+            }
+            if (baseI < 0) return null;
+            const base = closes[baseI];
+            if (!base) return null;
+            return ((last - base) / base) * 100;
+        }
+
+        async function fetchHistoricalData() {
+            if (isFetchingHist) return;
+            const stocks = chartData.filter(d => d.type === 'stock');
+            if (stocks.length === 0) return;
+            isFetchingHist = true; toggleRefreshUI(true);
+            const today = new Date().toISOString().slice(0, 10);
+            let ok = 0, fail = 0;
+
+            const chunk = 5; // 限制併發，對 Yahoo / Worker 友善
+            for (let i = 0; i < stocks.length; i += chunk) {
+                const batch = stocks.slice(i, i + chunk);
+                await Promise.all(batch.map(async (d) => {
+                    if (!d._periods) d._periods = {};
+                    const cached = histCache[d.id];
+                    if (cached && cached.date === today) { Object.assign(d._periods, cached.periods); ok++; return; }
+                    const r = await fetchOneChart(toSymbol(d.id));
+                    if (!r) { fail++; return; }
+                    const ts = r.timestamp, closes = r.indicators.quote[0].close;
+                    const raw = {
+                        '1wk': pctFromCloses(ts, closes, 7),
+                        '2wk': pctFromCloses(ts, closes, 14),
+                        '1mo': pctFromCloses(ts, closes, 30),
+                    };
+                    const periods = {};
+                    Object.keys(raw).forEach(k => { if (typeof raw[k] === 'number' && isFinite(raw[k])) periods[k] = raw[k]; });
+                    Object.assign(d._periods, periods);
+                    histCache[d.id] = { date: today, periods };
+                    ok++;
+                }));
+            }
+
+            isFetchingHist = false; toggleRefreshUI(isFetching || isFetchingHist);
+            applyPeriod(true, false); // 重新渲染；不再自動回頭抓，避免持續失敗時無限重試
+            if (ok === 0 && fail > 0) {
+                showMessage('無法取得歷史資料：你的同步 Worker 可能尚未支援 chart 代理（請見檔案附帶說明）', true);
+            } else if (fail > 0) {
+                showMessage(`部分股票歷史資料抓取失敗（${fail} 檔）`, true);
+            } else if (currentPeriod !== '1d') {
+                document.getElementById('updateTimeText').textContent = `更新時間: ${new Date().toLocaleTimeString()}（${PERIODS[currentPeriod].short}）`;
+            }
+        }
+
+        // 重整：報價（價格／名稱／當日）＋ 若在歷史週期則一併更新
+        function refreshData() {
+            fetchRealTimeData();
+            if (currentPeriod !== '1d') fetchHistoricalData();
+        }
+
         async function fetchRealTimeData() {
             if (isFetching) return;
             
@@ -625,14 +807,15 @@
                             if (/^\d+$/.test(querySymbol)) querySymbol += ".TW";
                             const quote = quoteMap[querySymbol];
                             if (quote) {
-                                d.change = parseFloat((quote.regularMarketChangePercent || 0).toFixed(2));
+                                if (!d._periods) d._periods = {};
+                                d._periods['1d'] = parseFloat((quote.regularMarketChangePercent || 0).toFixed(2));
                                 d.price = parseFloat((quote.regularMarketPrice || 0).toFixed(2));
                                 d.currency = quote.currency || 'USD';
                                 d.companyName = quote.longName || quote.shortName || '';
                             }
                         }
                     });
-                    saveData(); updateAll();
+                    saveData(); applyPeriod(true, true);
                     document.getElementById('updateTimeText').textContent = `更新時間: ${new Date().toLocaleTimeString()}`;
                     showMessage("即時數據同步成功！");
                 } else throw new Error("無效的資料內容結構");
@@ -640,7 +823,7 @@
                 console.warn("API 連線失敗，啟用模擬:", err);
                 document.getElementById('updateTimeText').textContent = `連線失敗，請檢查網路`;
                 showMessage(`連線發生錯誤：${err.message}`, true);
-            } finally { isFetching = false; toggleRefreshUI(false); }
+            } finally { isFetching = false; toggleRefreshUI(isFetching || isFetchingHist); }
         }
 
         function toggleRefreshUI(loading) {
@@ -655,7 +838,7 @@
                 document.getElementById('syncBadge').classList.remove('hidden');
                 updateIntervalId = setInterval(() => {
                     if (syncBlobId) { cloudPull(false).catch(() => {}); }
-                    fetchRealTimeData();
+                    refreshData();
                 }, 60000);
             } else document.getElementById('syncBadge').classList.add('hidden');
         }
@@ -744,7 +927,7 @@
                         <div class="font-mono text-lg">${priceDisplay}</div>
                     </div>
                     <div class="bg-slate-900 rounded-lg p-3 border border-slate-700">
-                        <div class="text-[11px] text-slate-400 mb-1">今日漲跌</div>
+                        <div class="text-[11px] text-slate-400 mb-1">${periodLabel()}</div>
                         <div class="font-mono text-lg font-bold" style="color: ${col}">${stock.change > 0 ? '+' : ''}${stock.change}%</div>
                     </div>
                 </div>
@@ -833,7 +1016,7 @@
                             <div class="font-bold text-lg mb-0.5 flex items-center gap-2"><span>${stock.id}</span><span class="text-xs px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 font-normal border border-slate-600">${cat.id}</span></div>
                             <div class="text-[11px] text-blue-200 mb-2 font-medium opacity-90 truncate max-w-[250px]">${companyNameText}</div>
                             <div class="space-y-1 text-xs text-slate-300"><div>目前價格: ${priceDisplay}</div></div>
-                            <div class="mt-2.5 pt-1.5 border-t border-slate-700 flex items-center justify-between"><span class="text-[11px] text-slate-400">今日漲跌:</span><span class="text-base font-mono font-bold" style="color: ${getChangeColor(stock.change)}">${stock.change > 0 ? '+' : ''}${stock.change}%</span></div>
+                            <div class="mt-2.5 pt-1.5 border-t border-slate-700 flex items-center justify-between"><span class="text-[11px] text-slate-400">${periodLabel()}:</span><span class="text-base font-mono font-bold" style="color: ${getChangeColor(stock.change)}">${stock.change > 0 ? '+' : ''}${stock.change}%</span></div>
                         `;
                         
                         let x = event.clientX - rect.left + 15;
@@ -913,7 +1096,12 @@
                 dot.className = "ml-auto inline-flex h-2.5 w-2.5 rounded-full bg-slate-500";
                 dot.title = "未連線";
                 statusText.textContent = "尚未啟用雲端同步";
+                // 尚未連線時一律展開，確保設定區可見
+                cloudCollapsed = false;
+                localStorage.setItem(CLOUD_COLLAPSE_KEY, '0');
             }
+            // 依目前狀態套用收合外觀
+            applyCloudCollapse();
         }
 
         function cloudFlash(busy) {
@@ -951,6 +1139,7 @@
                 localStorage.setItem(SYNC_ID_KEY, syncBlobId);
                 localStorage.setItem(STRUCT_TS_KEY, String(lastStructureTs));
                 setCloudUI();
+                setCloudCollapsed(true); // 連線完成 → 自動收起整個雲端同步區塊
                 showMessage('雲端同步已啟用！複製同步碼或連結到其他裝置即可');
             } catch (err) {
                 let msg = err.message || String(err);
@@ -975,6 +1164,7 @@
                     syncBlobId = id;
                     localStorage.setItem(SYNC_ID_KEY, syncBlobId);
                     setCloudUI();
+                    setCloudCollapsed(true); // 連線完成 → 自動收起整個雲端同步區塊
                     if (input) input.value = '';
                     showMessage('已連線並從雲端載入清單！');
                     updateAll(); fetchRealTimeData(); closeDrawerIfMobile();
@@ -1050,6 +1240,7 @@
             syncBlobId = null;
             localStorage.removeItem(SYNC_ID_KEY);
             setCloudUI();
+            setCloudCollapsed(false); // 中斷後展開，方便重新設定
             showMessage('已中斷此裝置的雲端同步');
         }
 
@@ -1106,6 +1297,7 @@
             }
 
             updateAll();
+            updatePeriodUI();
             handleAutoUpdateSetup();
             fetchRealTimeData();
         };
