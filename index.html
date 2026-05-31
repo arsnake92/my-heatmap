@@ -123,7 +123,6 @@
                 <span id="updateTimeText" class="text-xs font-mono text-slate-400">尚未更新數據</span>
             </div>
             <div class="h-4 w-px bg-slate-700 hidden sm:block"></div>
-            <!-- 顯示週期切換：當日 / 一週 / 兩週 / 一月 -->
             <div class="flex items-center gap-1.5">
                 <span class="text-[11px] text-slate-400 font-medium hidden sm:inline">週期</span>
                 <div id="periodSelector" class="flex items-center gap-0.5 bg-slate-800/80 p-0.5 rounded-lg border border-slate-700/60">
@@ -153,7 +152,6 @@
 
     <main class="flex-1 flex overflow-hidden relative">
         <aside id="sidebar" class="w-full lg:w-96 bg-slate-800/80 border-r border-slate-700 flex flex-col overflow-y-auto no-scrollbar transition-all duration-300 relative z-10 flex-shrink-0">
-            <!-- 手機版抽屜頂部（電腦版以 md:hidden 隱藏，不影響電腦版） -->
             <div class="md:hidden flex items-center justify-between p-4 border-b border-slate-700 sticky top-0 bg-slate-800 z-10">
                 <span class="text-sm font-semibold text-slate-200">設定與清單管理</span>
                 <button onclick="toggleSidebar()" class="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-200" title="關閉">
@@ -161,9 +159,7 @@
                 </button>
             </div>
 
-            <!-- 雲端同步 (JSONBlob) -->
             <div class="p-4 border-b border-slate-700">
-                <!-- 標題列可點擊：展開 / 收起整個雲端同步區塊 -->
                 <h2 id="cloudHeader" onclick="toggleCloudPanel()" class="text-sm font-semibold mb-2 flex items-center gap-2 cursor-pointer select-none" title="點此展開 / 收起雲端同步">
                     <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg>
                     雲端同步 (跨裝置)
@@ -171,11 +167,9 @@
                     <svg id="cloudChevron" class="w-4 h-4 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                 </h2>
 
-                <!-- 可收合的內容區（連線後會自動收起） -->
                 <div id="cloudBody">
                     <div id="cloudStatusText" class="text-[11px] text-slate-400 mb-2">尚未啟用雲端同步</div>
 
-                    <!-- 尚未連線：啟用 / 輸入同步碼 -->
                     <div id="cloudSetup" class="space-y-2">
                         <button id="cloudEnableBtn" onclick="cloudEnable()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2 rounded transition-colors text-xs">
                             ☁️ 啟用雲端同步（建立同步碼）
@@ -191,7 +185,6 @@
                         </div>
                     </div>
 
-                    <!-- 已連線：顯示同步碼與操作 -->
                     <div id="cloudConnected" class="space-y-2 hidden">
                         <div class="bg-slate-900 border border-slate-700 rounded p-2">
                             <div class="text-[10px] text-slate-400 mb-1">你的同步碼（在其他裝置貼上即可同步）</div>
@@ -209,7 +202,6 @@
                 </div>
             </div>
 
-            <!-- 新增群組 -->
             <div class="p-4 border-b border-slate-700">
                 <h2 class="text-sm font-semibold mb-2 flex items-center gap-2">
                     <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
@@ -223,7 +215,6 @@
                 </div>
             </div>
 
-            <!-- 新增股票 -->
             <div class="p-4 border-b border-slate-700">
                 <h2 class="text-sm font-semibold mb-2 flex items-center gap-2">
                     <svg class="w-4 h-4 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
@@ -231,7 +222,7 @@
                 </h2>
                 <div class="space-y-2">
                     <div class="grid grid-cols-2 gap-2">
-    <input type="text" id="stockName" onkeydown="if(event.key==='Enter') addStock()" placeholder="代號 (如 AAPL, 2330)" class="col-span-1 bg-slate-900 border border-slate-600 rounded p-1.5 text-sm focus:outline-none focus:border-teal-500">
+    <input type="text" id="stockName" onkeydown="if(event.key==='Enter') addStock()" placeholder="代號 (如 AAPL, 2330, 6547.TWO)" class="col-span-1 bg-slate-900 border border-slate-600 rounded p-1.5 text-sm focus:outline-none focus:border-teal-500">
     <select id="stockParent" onkeydown="if(event.key==='Enter') addStock()" class="col-span-1 bg-slate-900 border border-slate-600 rounded p-1.5 text-sm focus:outline-none focus:border-teal-500"></select>
 </div>
                     <button onclick="addStock()" class="w-full bg-teal-600 hover:bg-teal-500 text-white font-medium py-1.5 rounded transition-colors text-xs">
@@ -240,7 +231,6 @@
                 </div>
             </div>
 
-            <!-- 資料管理 -->
             <div class="p-4 flex-1">
                 <h2 class="text-sm font-semibold mb-3">資料清單管理 (點擊展開)</h2>
                 <div id="dataList" class="space-y-2 pb-10"></div>
@@ -260,7 +250,6 @@
                 </div>
             </div>
 
-            <!-- 縮放按鈕 -->
             <div id="zoomControls" class="absolute bottom-6 right-6 flex flex-col gap-1.5 bg-slate-800/90 p-1.5 rounded-lg border border-slate-700 shadow-xl backdrop-blur z-20">
                 <button onclick="controlZoom(0.1)" class="p-2 hover:bg-slate-700 rounded text-slate-200 transition-colors" title="放大">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
@@ -279,7 +268,6 @@
 
     <div id="tooltip"></div>
 
-    <!-- 行動版股票詳情面板（手機點擊個股顯示；電腦版維持 hover tooltip，不會觸發） -->
     <div id="mobileSheetBackdrop" onclick="closeMobileSheet()"></div>
     <div id="mobileSheet">
         <div class="grabber"></div>
@@ -287,6 +275,11 @@
     </div>
 
     <script>
+        // 用於畫面上顯示時，過濾掉後綴字元
+        function getDisplayId(id) {
+            return id.replace(/\.TWO$|\.TW$/i, '');
+        }
+
         const defaultChartData = [
             { id: "ROOT", parent: "", type: "root", change: 0 },
             { id: "科技巨頭", parent: "ROOT", type: "category", change: 0 },
@@ -525,16 +518,16 @@
         }
 
         function updateDropdowns() {
-    const stockParentSelect = document.getElementById('stockParent');
-    if (!stockParentSelect) return;
-    
-    const currentSelection = stockParentSelect.value; // 1. 先記住目前的選項
-    let optionsHTML = '';
-    chartData.filter(d => d.type === 'category').forEach(cat => { optionsHTML += `<option value="${cat.id}">${cat.id}</option>`; });
-    stockParentSelect.innerHTML = optionsHTML;
-    
-    if (currentSelection) stockParentSelect.value = currentSelection; // 2. 重新塞回剛才記住的選項
-}
+            const stockParentSelect = document.getElementById('stockParent');
+            if (!stockParentSelect) return;
+            
+            const currentSelection = stockParentSelect.value; // 1. 先記住目前的選項
+            let optionsHTML = '';
+            chartData.filter(d => d.type === 'category').forEach(cat => { optionsHTML += `<option value="${cat.id}">${cat.id}</option>`; });
+            stockParentSelect.innerHTML = optionsHTML;
+            
+            if (currentSelection) stockParentSelect.value = currentSelection; // 2. 重新塞回剛才記住的選項
+        }
 
         function toggleCategoryList(catId) { expandedCategories.has(catId) ? expandedCategories.delete(catId) : expandedCategories.add(catId); renderDataList(); }
 
@@ -570,7 +563,7 @@
                         html += `
                             <div class="flex justify-between items-center bg-slate-800/60 px-2 py-1.5 rounded border border-slate-700/50 hover:bg-slate-700/80 transition-colors">
                                 <div class="flex-1 flex justify-between pr-3 items-center">
-                                    <span class="text-xs font-bold">${stock.id}</span>
+                                    <span class="text-xs font-bold">${getDisplayId(stock.id)}</span>
                                     <span class="text-[10px] font-mono font-semibold" style="color: ${getChangeColor(stock.change)}">${stock.change >= 0 ? '+' : ''}${stock.change}%</span>
                                 </div>
                                 <div class="flex gap-1 border-l border-slate-700 pl-1">
@@ -599,7 +592,7 @@
         function editStock(oldId) {
             const stock = chartData.find(d => d.id === oldId && d.type === 'stock');
             if (!stock) return;
-            const newId = prompt(`修改股票代號（原代號：${oldId}）：\n※ 台股請直接輸入數字代碼`, oldId);
+            const newId = prompt(`修改股票代號（原代號：${oldId}）：\n※ 台股上市請輸入數字，上櫃請加 .TWO (如 6547.TWO)`, oldId);
             if (!newId || newId.trim() === "" || newId.trim().toUpperCase() === oldId) return;
             if (chartData.find(d => d.id === newId.trim().toUpperCase())) return showMessage("該股票代號已存在清單中！", true);
             stock.id = newId.trim().toUpperCase(); stock.price = null; stock.change = 0; stock.companyName = ""; stock.currency = "USD";
@@ -607,17 +600,17 @@
         }
 
         function addCategory() {
-    const name = document.getElementById('catName').value.trim();
-    if (!name) return showMessage('請輸入群組名稱', true);
-    if (chartData.find(d => d.id === name)) return showMessage('該名稱已存在', true);
-    chartData.push({ id: name, parent: "ROOT", type: 'category', change: 0 });
-    expandedCategories.add(name); document.getElementById('catName').value = '';
-    showMessage(`已新增群組: ${name}`); saveData(); updateAll(); scheduleCloudPush();
-    
-    // 👇 新增這兩行：加入新群組後，自動將下拉選單切換過去
-    const stockParentSelect = document.getElementById('stockParent');
-    if (stockParentSelect) stockParentSelect.value = name;
-}
+            const name = document.getElementById('catName').value.trim();
+            if (!name) return showMessage('請輸入群組名稱', true);
+            if (chartData.find(d => d.id === name)) return showMessage('該名稱已存在', true);
+            chartData.push({ id: name, parent: "ROOT", type: 'category', change: 0 });
+            expandedCategories.add(name); document.getElementById('catName').value = '';
+            showMessage(`已新增群組: ${name}`); saveData(); updateAll(); scheduleCloudPush();
+            
+            // 加入新群組後，自動將下拉選單切換過去
+            const stockParentSelect = document.getElementById('stockParent');
+            if (stockParentSelect) stockParentSelect.value = name;
+        }
 
         function addStock() {
             const name = document.getElementById('stockName').value.trim().toUpperCase();
@@ -900,7 +893,7 @@
                     tile.className = "aspect-square rounded-lg flex flex-col items-center justify-center active:scale-95 transition-transform relative border border-black/20 shadow-sm";
                     tile.style.backgroundColor = getChangeColor(stock.change);
                     tile.innerHTML = `
-                        <span class="text-white font-bold text-xs truncate w-full text-center px-1 pointer-events-none">${stock.id}</span>
+                        <span class="text-white font-bold text-xs truncate w-full text-center px-1 pointer-events-none">${getDisplayId(stock.id)}</span>
                         <span class="text-white/95 font-mono text-[10px] font-medium mt-0.5 pointer-events-none">${stock.change > 0 ? '+' : ''}${stock.change}%</span>
                     `;
                     tile.addEventListener('click', () => openMobileSheet(stock, cat.id));
@@ -921,7 +914,7 @@
                 <div class="flex items-start justify-between gap-3 mb-3">
                     <div>
                         <div class="flex items-center gap-2 flex-wrap">
-                            <span class="text-2xl font-bold">${stock.id}</span>
+                            <span class="text-2xl font-bold">${getDisplayId(stock.id)}</span>
                             <span class="text-[11px] px-2 py-0.5 rounded bg-slate-700 text-slate-300 border border-slate-600">${catId}</span>
                         </div>
                         <div class="text-xs text-blue-200 mt-1 opacity-90">${stock.companyName || '（無公司名稱）'}</div>
@@ -1010,7 +1003,7 @@
                     stockDiv.style.backgroundColor = getChangeColor(stock.change);
 
                     stockDiv.innerHTML = `
-                        <span class="text-white font-bold text-[11px] truncate w-full text-center px-0.5 pointer-events-none">${stock.id}</span>
+                        <span class="text-white font-bold text-[11px] truncate w-full text-center px-0.5 pointer-events-none">${getDisplayId(stock.id)}</span>
                         <span class="text-white/95 font-mono text-[9px] font-medium mt-0.5 pointer-events-none">${stock.change > 0 ? '+' : ''}${stock.change}%</span>
                     `;
 
@@ -1022,7 +1015,7 @@
                         const companyNameText = stock.companyName || '（擷取中 / 無公司名稱）';
 
                         tooltip.innerHTML = `
-                            <div class="font-bold text-lg mb-0.5 flex items-center gap-2"><span>${stock.id}</span><span class="text-xs px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 font-normal border border-slate-600">${cat.id}</span></div>
+                            <div class="font-bold text-lg mb-0.5 flex items-center gap-2"><span>${getDisplayId(stock.id)}</span><span class="text-xs px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 font-normal border border-slate-600">${cat.id}</span></div>
                             <div class="text-[11px] text-blue-200 mb-2 font-medium opacity-90 truncate max-w-[250px]">${companyNameText}</div>
                             <div class="space-y-1 text-xs text-slate-300"><div>目前價格: ${priceDisplay}</div></div>
                             <div class="mt-2.5 pt-1.5 border-t border-slate-700 flex items-center justify-between"><span class="text-[11px] text-slate-400">${periodLabel()}:</span><span class="text-base font-mono font-bold" style="color: ${getChangeColor(stock.change)}">${stock.change > 0 ? '+' : ''}${stock.change}%</span></div>
