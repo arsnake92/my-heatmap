@@ -127,9 +127,9 @@
                 <span class="text-[11px] text-slate-400 font-medium hidden sm:inline">週期</span>
                 <div id="periodSelector" class="flex items-center gap-0.5 bg-slate-800/80 p-0.5 rounded-lg border border-slate-700/60">
                     <button data-period="1d"  onclick="setPeriod('1d')"  class="period-btn text-xs font-medium px-2.5 py-1 rounded-md transition-colors">當日</button>
+                    <button data-period="3d"  onclick="setPeriod('3d')"  class="period-btn text-xs font-medium px-2.5 py-1 rounded-md transition-colors">三天</button>
                     <button data-period="1wk" onclick="setPeriod('1wk')" class="period-btn text-xs font-medium px-2.5 py-1 rounded-md transition-colors">一週</button>
                     <button data-period="2wk" onclick="setPeriod('2wk')" class="period-btn text-xs font-medium px-2.5 py-1 rounded-md transition-colors">兩週</button>
-                    <button data-period="1mo" onclick="setPeriod('1mo')" class="period-btn text-xs font-medium px-2.5 py-1 rounded-md transition-colors">一月</button>
                 </div>
             </div>
             <div class="h-4 w-px bg-slate-700 hidden sm:block"></div>
@@ -312,9 +312,9 @@
         const PERIOD_KEY = 'custom_heatmap_period_v8';
         const PERIODS = {
             '1d':  { label: '當日漲跌', short: '當日', days: 0  },
+            '3d':  { label: '三天漲跌', short: '三天', days: 3  },
             '1wk': { label: '一週漲跌', short: '一週', days: 7  },
             '2wk': { label: '兩週漲跌', short: '兩週', days: 14 },
-            '1mo': { label: '一月漲跌', short: '一月', days: 30 },
         };
         let currentPeriod = localStorage.getItem(PERIOD_KEY) || '1d';
         if (!PERIODS[currentPeriod]) currentPeriod = '1d';
@@ -560,13 +560,18 @@
                 if (catStocks.length === 0) { html += `<div class="text-xs text-slate-500 italic px-2 py-1">尚無股票，請從上方新增</div>`; } 
                 else {
                     catStocks.forEach(stock => {
+                        const inv = getInvested(stock);
                         html += `
                             <div class="flex justify-between items-center bg-slate-800/60 px-2 py-1.5 rounded border border-slate-700/50 hover:bg-slate-700/80 transition-colors">
-                                <div class="flex-1 flex justify-between pr-3 items-center">
+                                <div class="flex-1 flex justify-between pr-3 items-center gap-2">
                                     <span class="text-xs font-bold">${getDisplayId(stock.id)}</span>
-                                    <span class="text-[10px] font-mono font-semibold" style="color: ${getChangeColor(stock.change)}">${stock.change >= 0 ? '+' : ''}${stock.change}%</span>
+                                    <div class="flex items-center gap-2">
+                                        ${inv > 0 ? `<span class="text-[10px] font-mono text-amber-300" title="投入資金">$${fmtMoney(inv)}</span>` : ''}
+                                        <span class="text-[10px] font-mono font-semibold" style="color: ${getChangeColor(stock.change)}">${stock.change >= 0 ? '+' : ''}${stock.change}%</span>
+                                    </div>
                                 </div>
                                 <div class="flex gap-1 border-l border-slate-700 pl-1">
+                                    <button onclick="editInvestment('${stock.id}')" class="text-slate-400 hover:text-amber-400 p-1" title="設定投入資金"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path></svg></button>
                                     <button onclick="editStock('${stock.id}')" class="text-slate-400 hover:text-teal-400 p-1" title="修改股號"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg></button>
                                     <button onclick="deleteItem('${stock.id}')" class="text-slate-400 hover:text-red-400 p-1" title="刪除"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
                                 </div>
@@ -599,6 +604,25 @@
             showMessage(`股票代號已更新，正在重新抓取報價...`); saveData(); updateAll(); scheduleCloudPush(); fetchRealTimeData();
         }
 
+        function editInvestment(id) {
+            const stock = chartData.find(d => d.id === id && d.type === 'stock');
+            if (!stock) return;
+            const cur = getInvested(stock);
+            const input = prompt(`設定「${getDisplayId(id)}」目前投入的資金金額：\n（輸入 0 或留空可清除）`, cur ? String(cur) : '');
+            if (input === null) return; // 按取消
+            const val = parseFloat(String(input).replace(/[,\s$]/g, ''));
+            if (input.trim() === '' || val === 0) {
+                delete stock.invested;
+                showMessage(`已清除 ${getDisplayId(id)} 的投入資金`);
+            } else if (isNaN(val) || val < 0) {
+                return showMessage('請輸入有效的金額', true);
+            } else {
+                stock.invested = val;
+                showMessage(`已設定 ${getDisplayId(id)} 投入資金：$${fmtMoney(val)}`);
+            }
+            saveData(); updateAll(); scheduleCloudPush();
+        }
+
         function addCategory() {
             const name = document.getElementById('catName').value.trim();
             if (!name) return showMessage('請輸入群組名稱', true);
@@ -624,7 +648,7 @@
                 chartData[existingIndex] = { ...chartData[existingIndex], parent: parent, change: change };
                 showMessage(`已更新股票歸屬: ${name}`);
             } else {
-                chartData.push({ id: name, parent: parent, type: 'stock', change: change, price: null, currency: 'USD', companyName: '' });
+                chartData.push({ id: name, parent: parent, type: 'stock', change: change, price: null, currency: 'USD', companyName: '', invested: 0 });
                 showMessage(`已新增股票: ${name}`);
             }
             expandedCategories.add(parent); document.getElementById('stockName').value = '';
@@ -744,9 +768,9 @@
                     if (!r) { fail++; return; }
                     const ts = r.timestamp, closes = r.indicators.quote[0].close;
                     const raw = {
+                        '3d':  pctFromCloses(ts, closes, 3),
                         '1wk': pctFromCloses(ts, closes, 7),
                         '2wk': pctFromCloses(ts, closes, 14),
-                        '1mo': pctFromCloses(ts, closes, 30),
                     };
                     const periods = {};
                     Object.keys(raw).forEach(k => { if (typeof raw[k] === 'number' && isFinite(raw[k])) periods[k] = raw[k]; });
@@ -933,6 +957,13 @@
                         <div class="font-mono text-lg font-bold" style="color: ${col}">${stock.change > 0 ? '+' : ''}${stock.change}%</div>
                     </div>
                 </div>
+                <div class="mt-2 bg-slate-900 rounded-lg p-3 border border-slate-700 flex items-center justify-between gap-3">
+                    <div>
+                        <div class="text-[11px] text-slate-400 mb-1">投入資金</div>
+                        <div class="font-mono text-lg font-bold text-amber-300">${getInvested(stock) > 0 ? '$' + fmtMoney(getInvested(stock)) : '<span class="text-slate-500 italic text-base font-normal">未設定</span>'}</div>
+                    </div>
+                    <button onclick="editInvestment('${stock.id}'); closeMobileSheet();" class="bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold py-2 px-3 rounded-lg flex-shrink-0">設定金額</button>
+                </div>
             `;
             document.getElementById('mobileSheet').classList.add('show');
             document.getElementById('mobileSheetBackdrop').classList.add('show');
@@ -946,9 +977,24 @@
         function closeDrawerIfMobile() { if (IS_MOBILE) sidebar.classList.add('hidden'); }
 
         function getChangeColor(change) {
-            return currentMode === 'US' 
+            return currentMode === 'US'
                 ? d3.scaleLinear().domain([-5, 0, 5]).range(["#dc2626", "#475569", "#16a34a"]).clamp(true)(change)
                 : d3.scaleLinear().domain([-5, 0, 5]).range(["#16a34a", "#475569", "#dc2626"]).clamp(true)(change);
+        }
+
+        // ===== 投入資金 / 市場分類 工具 =====
+        function getInvested(stock) {
+            return (stock && typeof stock.invested === 'number' && isFinite(stock.invested) && stock.invested > 0) ? stock.invested : 0;
+        }
+        function fmtMoney(n) {
+            return Math.round(n).toLocaleString('en-US');
+        }
+        // 判斷是否為台股：代號為純數字、或帶 .TW / .TWO 後綴、或報價幣別為 TWD
+        function isTWStock(stock) {
+            const id = (stock.id || '').toUpperCase();
+            if (/\.TWO?$/.test(id)) return true;
+            if (/^\d/.test(id)) return true;
+            return stock.currency === 'TWD';
         }
 
         function updateColorModeButtonUI() {
@@ -963,8 +1009,76 @@
 
         colorModeBtn.addEventListener('click', () => { currentMode = currentMode === 'US' ? 'TW' : 'US'; updateColorModeButtonUI(); saveData(); renderChart(); scheduleCloudPush(); });
 
+        // 建立單一個股方塊（含 tooltip / 點擊行為），供分群中的台股 / 美股子框重複使用
+        function buildStockTile(stock, catId) {
+            const stockDiv = document.createElement('div');
+            stockDiv.className = "w-[54px] h-[54px] rounded-md flex flex-col items-center justify-center cursor-pointer transition-transform hover:scale-110 hover:z-10 relative border border-black/20 shadow-sm";
+            stockDiv.style.backgroundColor = getChangeColor(stock.change);
+
+            const invested = getInvested(stock);
+            stockDiv.innerHTML = `
+                <span class="text-white font-bold text-[11px] truncate w-full text-center px-0.5 pointer-events-none">${getDisplayId(stock.id)}</span>
+                <span class="text-white/95 font-mono text-[9px] font-medium mt-0.5 pointer-events-none">${stock.change > 0 ? '+' : ''}${stock.change}%</span>
+                ${invested > 0 ? `<span class="text-white/90 font-mono text-[8px] leading-none mt-0.5 pointer-events-none">$${fmtMoney(invested)}</span>` : ''}
+            `;
+
+            stockDiv.addEventListener('mousemove', (event) => {
+                const rect = container.getBoundingClientRect();
+                tooltip.style.opacity = 1;
+
+                const priceDisplay = stock.price ? `<span class="font-mono text-white text-base">${stock.price}</span> <span class="text-xs text-slate-400">${stock.currency}</span>` : `<span class="text-slate-400 italic">無報價資料</span>`;
+                const companyNameText = stock.companyName || '（擷取中 / 無公司名稱）';
+                const investedRow = invested > 0
+                    ? `<div class="mt-1.5 flex items-center justify-between"><span class="text-[11px] text-slate-400">投入資金:</span><span class="text-sm font-mono font-bold text-amber-300">$${fmtMoney(invested)}</span></div>`
+                    : '';
+
+                tooltip.innerHTML = `
+                    <div class="font-bold text-lg mb-0.5 flex items-center gap-2"><span>${getDisplayId(stock.id)}</span><span class="text-xs px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 font-normal border border-slate-600">${catId}</span></div>
+                    <div class="text-[11px] text-blue-200 mb-2 font-medium opacity-90 truncate max-w-[250px]">${companyNameText}</div>
+                    <div class="space-y-1 text-xs text-slate-300"><div>目前價格: ${priceDisplay}</div></div>
+                    ${investedRow}
+                    <div class="mt-2.5 pt-1.5 border-t border-slate-700 flex items-center justify-between"><span class="text-[11px] text-slate-400">${periodLabel()}:</span><span class="text-base font-mono font-bold" style="color: ${getChangeColor(stock.change)}">${stock.change > 0 ? '+' : ''}${stock.change}%</span></div>
+                `;
+
+                let x = event.clientX - rect.left + 15;
+                let y = event.clientY - rect.top + 15;
+                if (x + tooltip.offsetWidth > rect.width) x = x - tooltip.offsetWidth - 30;
+                if (y + tooltip.offsetHeight > rect.height) y = y - tooltip.offsetHeight - 30;
+                tooltip.style.left = x + 'px'; tooltip.style.top = y + 'px';
+            });
+
+            stockDiv.addEventListener('mouseout', () => { tooltip.style.opacity = 0; });
+            stockDiv.addEventListener('click', () => { if (IS_MOBILE) openMobileSheet(stock, catId); });
+            return stockDiv;
+        }
+
+        // 建立分群內的「市場子框」（台股 / 美股）：有自己的漲跌顏色但不顯示數字
+        function buildMarketBox(label, mStocks, catId) {
+            const avgChange = (mStocks.reduce((s, x) => s + x.change, 0) / mStocks.length);
+            const col = getChangeColor(avgChange.toFixed(2));
+            const cols = Math.ceil(Math.sqrt(mStocks.length));
+
+            const box = document.createElement('div');
+            box.className = "rounded-lg border-2 p-1";
+            box.style.borderColor = col;
+            box.style.backgroundColor = 'rgba(0,0,0,0.22)';
+
+            const tag = document.createElement('div');
+            tag.className = "text-[9px] font-bold px-1 pb-0.5 tracking-widest";
+            tag.style.color = col;
+            tag.textContent = label;
+            box.appendChild(tag);
+
+            const gridDiv = document.createElement('div');
+            gridDiv.className = "grid gap-1";
+            gridDiv.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+            mStocks.forEach(stock => gridDiv.appendChild(buildStockTile(stock, catId)));
+            box.appendChild(gridDiv);
+            return box;
+        }
+
         function renderTreemap() {
-            zoomLayer.innerHTML = ''; 
+            zoomLayer.innerHTML = '';
             const stocks = chartData.filter(d => d.type === 'stock');
             if (stocks.length === 0) { document.getElementById('emptyState').classList.remove('hidden'); return; }
             document.getElementById('emptyState').classList.add('hidden');
@@ -976,63 +1090,36 @@
                 const totalChange = catStocks.reduce((sum, stock) => sum + stock.change, 0);
                 const avgChange = (totalChange / catStocks.length).toFixed(2);
                 const avgColor = getChangeColor(avgChange);
-                const cols = Math.ceil(Math.sqrt(catStocks.length));
+                const totalInvested = catStocks.reduce((s, x) => s + getInvested(x), 0);
 
                 const catDiv = document.createElement('div');
-                catDiv.className = "bg-slate-900 border-2 rounded-xl overflow-hidden shadow-2xl flex flex-col transition-all mb-2"; 
+                catDiv.className = "bg-slate-900 border-2 rounded-xl overflow-hidden shadow-2xl flex flex-col transition-all mb-2";
                 catDiv.style.borderColor = avgColor;
 
                 const header = document.createElement('div');
-                header.className = "px-3 py-2 bg-slate-800 border-b-2 flex items-center justify-between";
+                header.className = "px-3 py-2 bg-slate-800 border-b-2 flex items-center justify-between gap-2";
                 header.style.borderBottomColor = avgColor;
                 header.innerHTML = `
                     <span class="text-slate-100 font-bold text-[13px] tracking-wide">${cat.id}</span>
-                    <span class="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-black/40 shadow-inner" style="color: ${avgColor}">
-                        ${avgChange > 0 ? '+' : ''}${avgChange}%
-                    </span>
+                    <div class="flex items-center gap-1.5">
+                        ${totalInvested > 0 ? `<span class="font-mono text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30" title="此分群投入資金總額">$${fmtMoney(totalInvested)}</span>` : ''}
+                        <span class="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-black/40 shadow-inner" style="color: ${avgColor}">${avgChange > 0 ? '+' : ''}${avgChange}%</span>
+                    </div>
                 `;
                 catDiv.appendChild(header);
 
-                const gridDiv = document.createElement('div');
-                gridDiv.className = "p-1.5 grid gap-1";
-                gridDiv.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+                // 分群內再依市場切成「台股（上）／美股（下）」兩個子框
+                const body = document.createElement('div');
+                body.className = "p-1.5 flex flex-col gap-1.5";
 
-                catStocks.forEach(stock => {
-                    const stockDiv = document.createElement('div');
-                    stockDiv.className = "w-[54px] h-[54px] rounded-md flex flex-col items-center justify-center cursor-pointer transition-transform hover:scale-110 hover:z-10 relative border border-black/20 shadow-sm";
-                    stockDiv.style.backgroundColor = getChangeColor(stock.change);
-
-                    stockDiv.innerHTML = `
-                        <span class="text-white font-bold text-[11px] truncate w-full text-center px-0.5 pointer-events-none">${getDisplayId(stock.id)}</span>
-                        <span class="text-white/95 font-mono text-[9px] font-medium mt-0.5 pointer-events-none">${stock.change > 0 ? '+' : ''}${stock.change}%</span>
-                    `;
-
-                    stockDiv.addEventListener('mousemove', (event) => {
-                        const rect = container.getBoundingClientRect();
-                        tooltip.style.opacity = 1;
-                        
-                        const priceDisplay = stock.price ? `<span class="font-mono text-white text-base">${stock.price}</span> <span class="text-xs text-slate-400">${stock.currency}</span>` : `<span class="text-slate-400 italic">無報價資料</span>`;
-                        const companyNameText = stock.companyName || '（擷取中 / 無公司名稱）';
-
-                        tooltip.innerHTML = `
-                            <div class="font-bold text-lg mb-0.5 flex items-center gap-2"><span>${getDisplayId(stock.id)}</span><span class="text-xs px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 font-normal border border-slate-600">${cat.id}</span></div>
-                            <div class="text-[11px] text-blue-200 mb-2 font-medium opacity-90 truncate max-w-[250px]">${companyNameText}</div>
-                            <div class="space-y-1 text-xs text-slate-300"><div>目前價格: ${priceDisplay}</div></div>
-                            <div class="mt-2.5 pt-1.5 border-t border-slate-700 flex items-center justify-between"><span class="text-[11px] text-slate-400">${periodLabel()}:</span><span class="text-base font-mono font-bold" style="color: ${getChangeColor(stock.change)}">${stock.change > 0 ? '+' : ''}${stock.change}%</span></div>
-                        `;
-                        
-                        let x = event.clientX - rect.left + 15;
-                        let y = event.clientY - rect.top + 15;
-                        if (x + tooltip.offsetWidth > rect.width) x = x - tooltip.offsetWidth - 30;
-                        if (y + tooltip.offsetHeight > rect.height) y = y - tooltip.offsetHeight - 30;
-                        tooltip.style.left = x + 'px'; tooltip.style.top = y + 'px';
-                    });
-
-                    stockDiv.addEventListener('mouseout', () => { tooltip.style.opacity = 0; });
-                    stockDiv.addEventListener('click', () => { if (IS_MOBILE) openMobileSheet(stock, cat.id); });
-                    gridDiv.appendChild(stockDiv);
+                const twStocks = catStocks.filter(isTWStock);
+                const usStocks = catStocks.filter(s => !isTWStock(s));
+                [{ label: '台股', stocks: twStocks }, { label: '美股', stocks: usStocks }].forEach(g => {
+                    if (g.stocks.length === 0) return;
+                    body.appendChild(buildMarketBox(g.label, g.stocks, cat.id));
                 });
-                catDiv.appendChild(gridDiv); zoomLayer.appendChild(catDiv);
+
+                catDiv.appendChild(body); zoomLayer.appendChild(catDiv);
             });
         }
 
@@ -1049,7 +1136,9 @@
                 colorMode: currentMode,
                 items: chartData
                     .filter(d => d.type === 'root' || d.type === 'category' || d.type === 'stock')
-                    .map(d => ({ id: d.id, parent: d.parent, type: d.type }))
+                    .map(d => d.type === 'stock'
+                        ? { id: d.id, parent: d.parent, type: d.type, invested: getInvested(d) }
+                        : { id: d.id, parent: d.parent, type: d.type })
             };
         }
 
@@ -1066,7 +1155,8 @@
                         change: (typeof o.change === 'number' ? o.change : 0),
                         price: (o.price !== undefined ? o.price : null),
                         currency: (o.currency || 'USD'),
-                        companyName: (o.companyName || '')
+                        companyName: (o.companyName || ''),
+                        invested: (typeof it.invested === 'number' ? it.invested : getInvested(o))
                     };
                 }
                 return { id: it.id, parent: it.parent, type: it.type, change: 0 };
