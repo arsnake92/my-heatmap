@@ -259,7 +259,7 @@
             </div>
 
             <div class="w-full h-full grab-cursor relative overflow-hidden" id="treemapContainer">
-                <div id="zoomLayer" class="absolute origin-top-left transition-transform duration-75">
+                <div id="zoomLayer" class="absolute origin-top-left flex flex-wrap gap-5 p-6 items-start content-start transition-transform duration-75 min-w-[1000px] min-h-[800px]">
                 </div>
                 <div id="emptyState" class="absolute inset-0 flex items-center justify-center text-slate-500 hidden pointer-events-none">
                     查無資料，請從左側新增。
@@ -1177,10 +1177,7 @@
         // 建立單一個股方塊（含 tooltip / 點擊行為），供分群中的台股 / 美股子框重複使用
         function buildStockTile(stock, catId) {
             const stockDiv = document.createElement('div');
-            // 電腦版：方塊寬度填滿格線欄位（由 buildMarketBox 平均分配分群寬度）；
-            // 行動版：維持原本固定 54px 正方形。
-            const sizeCls = IS_MOBILE ? "w-[54px] h-[54px]" : "w-full h-[54px]";
-            stockDiv.className = `${sizeCls} rounded-md flex flex-col items-center justify-center cursor-pointer transition-transform hover:scale-110 hover:z-10 relative border border-black/20 shadow-sm`;
+            stockDiv.className = "w-[54px] h-[54px] rounded-md flex flex-col items-center justify-center cursor-pointer transition-transform hover:scale-110 hover:z-10 relative border border-black/20 shadow-sm";
             stockDiv.style.backgroundColor = getChangeColor(stock.change);
 
             const shares = getShares(stock), value = getValue(stock);
@@ -1258,25 +1255,16 @@
             const catDiv = document.createElement('div');
             catDiv.className = "bg-slate-900 border-2 rounded-xl overflow-hidden shadow-2xl flex flex-col transition-all";
             catDiv.style.borderColor = avgColor;
-            if (IS_MOBILE) {
-                catDiv.style.width = 'max-content'; // 行動版維持原本依內容決定寬度
-            } else {
-                // 電腦版：方塊填滿整欄寬度，並避免在多欄排版中被切斷
-                catDiv.style.width = '100%';
-                catDiv.style.breakInside = 'avoid';
-                catDiv.style.webkitColumnBreakInside = 'avoid';
-                catDiv.style.marginBottom = '1.25rem';
-            }
 
             const header = document.createElement('div');
-            header.className = "px-3 py-2 bg-slate-800 border-b-2 flex items-center justify-between gap-2 cursor-pointer hover:bg-slate-700/80 transition-colors w-full";
+            header.className = "px-3 py-2 bg-slate-800 border-b-2 flex items-center justify-between gap-2 cursor-pointer hover:bg-slate-700/80 transition-colors";
             header.style.borderBottomColor = avgColor;
             header.title = '點擊在持倉配置圓環圖中標示此分群';
             header.innerHTML = `
-                <span class="text-slate-100 font-bold text-[13px] tracking-wide truncate min-w-0 flex-1">${cat.id}</span>
-                <div class="flex items-center gap-1.5 flex-shrink-0">
-                    ${totalValue > 0 ? `<span class="font-mono text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 min-w-[6rem] text-right" title="此分群目前持倉市值（台幣）">NT$${fmtMoney(totalValue)}</span>` : ''}
-                    <span class="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-black/40 shadow-inner text-right min-w-[4.5rem]" style="color: ${avgColor}">${avgChange > 0 ? '+' : ''}${avgChange}%</span>
+                <span class="text-slate-100 font-bold text-[13px] tracking-wide">${cat.id}</span>
+                <div class="flex items-center gap-1.5">
+                    ${totalValue > 0 ? `<span class="font-mono text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30" title="此分群目前持倉市值（台幣）">NT$${fmtMoney(totalValue)}</span>` : ''}
+                    <span class="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-black/40 shadow-inner" style="color: ${avgColor}">${avgChange > 0 ? '+' : ''}${avgChange}%</span>
                 </div>
             `;
             header.addEventListener('click', (e) => { e.stopPropagation(); highlightCategory(cat.id); });
@@ -1295,48 +1283,9 @@
             return catDiv;
         }
 
-        // 設定熱力圖容器的版面
-        // ・電腦版：響應式多欄（masonry）排版。分群方塊填滿熱力圖區塊的寬度，
-        //   欄數會依目前視窗（熱力圖區塊）寬度自動增減；方塊在欄內由上往下緊密
-        //   堆疊，分群檔數不同也不會在分群之間留下空白。
-        // ・行動版：維持原本的橫向換行格狀（沿用既有縮放塞滿螢幕的體驗，不更動）。
-        function applyTreemapLayout() {
-            if (IS_MOBILE) {
-                zoomLayer.style.display = 'flex';
-                zoomLayer.style.flexDirection = 'row';
-                zoomLayer.style.flexWrap = 'wrap';
-                zoomLayer.style.alignContent = 'flex-start';
-                zoomLayer.style.alignItems = 'flex-start';
-                zoomLayer.style.gap = '1.25rem';
-                zoomLayer.style.padding = '1.5rem';
-                zoomLayer.style.width = '';
-                zoomLayer.style.height = '';
-                zoomLayer.style.minWidth = '1000px';
-                zoomLayer.style.minHeight = '800px';
-                zoomLayer.style.columnWidth = '';
-                zoomLayer.style.columnGap = '';
-            } else {
-                zoomLayer.style.display = 'block';
-                zoomLayer.style.columnWidth = '360px';   // 欄寬基準：視窗越寬欄數越多
-                zoomLayer.style.columnGap = '1.25rem';
-                zoomLayer.style.padding = '1.5rem';
-                zoomLayer.style.width = '100%';           // 填滿熱力圖區塊寬度，隨視窗縮放
-                zoomLayer.style.height = '';
-                zoomLayer.style.minWidth = '';
-                zoomLayer.style.minHeight = '';
-                // 清除 flex 殘留屬性，避免與多欄排版衝突
-                zoomLayer.style.flexDirection = '';
-                zoomLayer.style.flexWrap = '';
-                zoomLayer.style.alignContent = '';
-                zoomLayer.style.alignItems = '';
-                zoomLayer.style.gap = '';
-            }
-        }
-
         // 格狀版面：分群方塊依序排列（原本的熱力圖）
         function renderTreemap() {
             zoomLayer.innerHTML = '';
-            applyTreemapLayout();
             const stocks = chartData.filter(d => d.type === 'stock');
             if (stocks.length === 0) { document.getElementById('emptyState').classList.remove('hidden'); return; }
             document.getElementById('emptyState').classList.add('hidden');
@@ -1604,8 +1553,6 @@
                     IS_MOBILE = nowMobile;
                     if (!IS_MOBILE) { closeMobileSheet(); scale = 1; panX = 0; panY = 0; }
                     renderChart();
-                } else if (!IS_MOBILE) {
-                    renderChart(); // 電腦版視窗縮放 → 重算橫向排列的欄位高度
                 }
             }, 200);
         });
