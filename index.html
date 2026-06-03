@@ -240,7 +240,13 @@
             </div>
 
             <div class="p-4 flex-1">
-                <h2 class="text-sm font-semibold mb-3">資料清單管理 (點擊展開)</h2>
+                <div class="flex items-center justify-between mb-3 gap-2">
+                    <h2 class="text-sm font-semibold">資料清單管理 (點擊展開)</h2>
+                    <button id="toggleAllBtn" onclick="toggleAllCategories()" class="text-[11px] text-slate-300 hover:text-white bg-slate-700/70 hover:bg-slate-600 px-2 py-1 rounded transition-colors flex items-center gap-1 flex-shrink-0" title="一鍵收合 / 展開全部分群">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 11l7-7 7 7M5 19l7-7 7 7"></path></svg>
+                        <span id="toggleAllLabel">收合全部</span>
+                    </button>
+                </div>
                 <div id="dataList" class="space-y-2 pb-10"></div>
             </div>
         </aside>
@@ -539,6 +545,28 @@
 
         function toggleCategoryList(catId) { expandedCategories.has(catId) ? expandedCategories.delete(catId) : expandedCategories.add(catId); renderDataList(); }
 
+        // 一鍵收合 / 展開全部分群清單（只影響左側清單，不影響熱力圖）
+        function toggleAllCategories() {
+            const cats = chartData.filter(d => d.type === 'category');
+            const anyExpanded = cats.some(c => expandedCategories.has(c.id));
+            if (anyExpanded) expandedCategories.clear();
+            else cats.forEach(c => expandedCategories.add(c.id));
+            renderDataList();
+        }
+
+        // 依目前展開狀態更新按鈕文字與圖示（沒有分群時隱藏按鈕）
+        function updateToggleAllLabel() {
+            const btn = document.getElementById('toggleAllBtn');
+            const lbl = document.getElementById('toggleAllLabel');
+            if (!btn || !lbl) return;
+            const cats = chartData.filter(d => d.type === 'category');
+            btn.style.display = cats.length ? '' : 'none';
+            const anyExpanded = cats.some(c => expandedCategories.has(c.id));
+            lbl.textContent = anyExpanded ? '收合全部' : '展開全部';
+            const icon = btn.querySelector('svg path');
+            if (icon) icon.setAttribute('d', anyExpanded ? 'M5 11l7-7 7 7M5 19l7-7 7 7' : 'M19 13l-7 7-7-7M19 5l-7 7-7-7');
+        }
+
         function renderDataList() {
             const listContainer = document.getElementById('dataList'); listContainer.innerHTML = '';
             const categories = chartData.filter(d => d.type === 'category');
@@ -589,6 +617,8 @@
                 }
                 html += `</div></div>`; listContainer.insertAdjacentHTML('beforeend', html);
             });
+
+            updateToggleAllLabel();
         }
 
         function editCategory(oldId) {
