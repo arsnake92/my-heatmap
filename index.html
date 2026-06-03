@@ -1177,7 +1177,10 @@
         // 建立單一個股方塊（含 tooltip / 點擊行為），供分群中的台股 / 美股子框重複使用
         function buildStockTile(stock, catId) {
             const stockDiv = document.createElement('div');
-            stockDiv.className = "w-[54px] h-[54px] rounded-md flex flex-col items-center justify-center cursor-pointer transition-transform hover:scale-110 hover:z-10 relative border border-black/20 shadow-sm";
+            // 電腦版：方塊寬度填滿格線欄位（由 buildMarketBox 平均分配分群寬度）；
+            // 行動版：維持原本固定 54px 正方形。
+            const sizeCls = IS_MOBILE ? "w-[54px] h-[54px]" : "w-full h-[54px]";
+            stockDiv.className = `${sizeCls} rounded-md flex flex-col items-center justify-center cursor-pointer transition-transform hover:scale-110 hover:z-10 relative border border-black/20 shadow-sm`;
             stockDiv.style.backgroundColor = getChangeColor(stock.change);
 
             const shares = getShares(stock), value = getValue(stock);
@@ -1253,8 +1256,17 @@
             const totalValue = catStocks.reduce((s, x) => s + getValue(x), 0);
 
             const catDiv = document.createElement('div');
-            catDiv.className = "bg-slate-900 border-2 rounded-xl overflow-hidden shadow-2xl flex flex-col transition-all w-max";
+            catDiv.className = "bg-slate-900 border-2 rounded-xl overflow-hidden shadow-2xl flex flex-col transition-all";
             catDiv.style.borderColor = avgColor;
+            if (IS_MOBILE) {
+                catDiv.style.width = 'max-content'; // 行動版維持原本依內容決定寬度
+            } else {
+                // 電腦版：方塊填滿整欄寬度，並避免在多欄排版中被切斷
+                catDiv.style.width = '100%';
+                catDiv.style.breakInside = 'avoid';
+                catDiv.style.webkitColumnBreakInside = 'avoid';
+                catDiv.style.marginBottom = '1.25rem';
+            }
 
             const header = document.createElement('div');
             header.className = "px-3 py-2 bg-slate-800 border-b-2 flex items-center justify-between gap-2 cursor-pointer hover:bg-slate-700/80 transition-colors w-full";
@@ -1284,28 +1296,40 @@
         }
 
         // 設定熱力圖容器的版面
-        // ・電腦版：改為「直欄填滿後向右延伸」的橫向排列（masonry 風格）
-        //   → 內容往右長，用左右平移瀏覽即可，不必再縮到很小才看得到全部；
-        //   → 各分群檔數不同時，方塊在欄內由上往下緊密堆疊，不會在分群之間留下空白。
+        // ・電腦版：響應式多欄（masonry）排版。分群方塊填滿熱力圖區塊的寬度，
+        //   欄數會依目前視窗（熱力圖區塊）寬度自動增減；方塊在欄內由上往下緊密
+        //   堆疊，分群檔數不同也不會在分群之間留下空白。
         // ・行動版：維持原本的橫向換行格狀（沿用既有縮放塞滿螢幕的體驗，不更動）。
         function applyTreemapLayout() {
-            zoomLayer.style.display = 'flex';
-            zoomLayer.style.flexWrap = 'wrap';
-            zoomLayer.style.gap = '1.25rem';
-            zoomLayer.style.padding = '1.5rem';
-            zoomLayer.style.alignContent = 'flex-start';
-            zoomLayer.style.alignItems = 'flex-start';
             if (IS_MOBILE) {
+                zoomLayer.style.display = 'flex';
                 zoomLayer.style.flexDirection = 'row';
+                zoomLayer.style.flexWrap = 'wrap';
+                zoomLayer.style.alignContent = 'flex-start';
+                zoomLayer.style.alignItems = 'flex-start';
+                zoomLayer.style.gap = '1.25rem';
+                zoomLayer.style.padding = '1.5rem';
+                zoomLayer.style.width = '';
                 zoomLayer.style.height = '';
                 zoomLayer.style.minWidth = '1000px';
                 zoomLayer.style.minHeight = '800px';
+                zoomLayer.style.columnWidth = '';
+                zoomLayer.style.columnGap = '';
             } else {
-                zoomLayer.style.flexDirection = 'column';
-                // 欄位高度鎖定為可視區高度，方塊填滿一欄後才換到右邊新的一欄
-                zoomLayer.style.height = Math.max(container.clientHeight, 200) + 'px';
+                zoomLayer.style.display = 'block';
+                zoomLayer.style.columnWidth = '360px';   // 欄寬基準：視窗越寬欄數越多
+                zoomLayer.style.columnGap = '1.25rem';
+                zoomLayer.style.padding = '1.5rem';
+                zoomLayer.style.width = '100%';           // 填滿熱力圖區塊寬度，隨視窗縮放
+                zoomLayer.style.height = '';
                 zoomLayer.style.minWidth = '';
                 zoomLayer.style.minHeight = '';
+                // 清除 flex 殘留屬性，避免與多欄排版衝突
+                zoomLayer.style.flexDirection = '';
+                zoomLayer.style.flexWrap = '';
+                zoomLayer.style.alignContent = '';
+                zoomLayer.style.alignItems = '';
+                zoomLayer.style.gap = '';
             }
         }
 
