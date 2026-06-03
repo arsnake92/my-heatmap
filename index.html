@@ -1264,7 +1264,7 @@
                 <span class="text-slate-100 font-bold text-[13px] tracking-wide">${cat.id}</span>
                 <div class="flex items-center gap-1.5">
                     ${totalValue > 0 ? `<span class="font-mono text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30" title="此分群目前持倉市值（台幣）">NT$${fmtMoney(totalValue)}</span>` : ''}
-                    <span class="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-black/40 shadow-inner" style="color: ${avgColor}">${avgChange > 0 ? '+' : ''}${avgChange}%</span>
+                    <span class="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-black/40 shadow-inner text-right" style="color: ${avgColor}; min-width: 4.5rem">${avgChange > 0 ? '+' : ''}${avgChange}%</span>
                 </div>
             `;
             header.addEventListener('click', (e) => { e.stopPropagation(); highlightCategory(cat.id); });
