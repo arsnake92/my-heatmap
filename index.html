@@ -1253,18 +1253,18 @@
             const totalValue = catStocks.reduce((s, x) => s + getValue(x), 0);
 
             const catDiv = document.createElement('div');
-            catDiv.className = "bg-slate-900 border-2 rounded-xl overflow-hidden shadow-2xl flex flex-col transition-all";
+            catDiv.className = "bg-slate-900 border-2 rounded-xl overflow-hidden shadow-2xl flex flex-col transition-all w-max";
             catDiv.style.borderColor = avgColor;
 
             const header = document.createElement('div');
-            header.className = "px-3 py-2 bg-slate-800 border-b-2 flex items-center justify-between gap-2 cursor-pointer hover:bg-slate-700/80 transition-colors";
+            header.className = "px-3 py-2 bg-slate-800 border-b-2 flex items-center justify-between gap-2 cursor-pointer hover:bg-slate-700/80 transition-colors w-full";
             header.style.borderBottomColor = avgColor;
             header.title = '點擊在持倉配置圓環圖中標示此分群';
             header.innerHTML = `
-                <span class="text-slate-100 font-bold text-[13px] tracking-wide">${cat.id}</span>
-                <div class="flex items-center gap-1.5">
-                    ${totalValue > 0 ? `<span class="font-mono text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30" title="此分群目前持倉市值（台幣）">NT$${fmtMoney(totalValue)}</span>` : ''}
-                    <span class="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-black/40 shadow-inner" style="color: ${avgColor}">${avgChange > 0 ? '+' : ''}${avgChange}%</span>
+                <span class="text-slate-100 font-bold text-[13px] tracking-wide truncate min-w-0 flex-1">${cat.id}</span>
+                <div class="flex items-center gap-1.5 flex-shrink-0">
+                    ${totalValue > 0 ? `<span class="font-mono text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 min-w-[6rem] text-right" title="此分群目前持倉市值（台幣）">NT$${fmtMoney(totalValue)}</span>` : ''}
+                    <span class="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-black/40 shadow-inner text-right min-w-[4.5rem]" style="color: ${avgColor}">${avgChange > 0 ? '+' : ''}${avgChange}%</span>
                 </div>
             `;
             header.addEventListener('click', (e) => { e.stopPropagation(); highlightCategory(cat.id); });
