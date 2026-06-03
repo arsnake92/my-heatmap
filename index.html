@@ -957,13 +957,14 @@
 
             const esc = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
             const sel = highlightedCategory;
+            const selInData = !!sel && data.some(d => d.name === sel); // 被標示分群是否有投入資金（在圓環中）
 
             const size = 180, r = size / 2, inner = r * 0.62;
             const pie = d3.pie().value(d => d.value).sort(null).padAngle(0.015);
             const arcGen = d3.arc().innerRadius(inner).outerRadius(r).cornerRadius(3);
             const paths = pie(data).map(a => {
                 const isSel = sel === a.data.name;
-                const op = (sel && !isSel) ? 0.3 : 1;
+                const op = (selInData && !isSel) ? 0.3 : 1;
                 const sw = isSel ? 2.5 : 1.5;
                 const stroke = isSel ? '#fbbf24' : '#0f172a';
                 return `<path data-cat="${esc(a.data.name)}" d="${arcGen(a)}" fill="${a.data.color}" stroke="${stroke}" stroke-width="${sw}" opacity="${op}" style="cursor:pointer"></path>`;
@@ -989,8 +990,8 @@
             }).join('');
 
             const hint = sel
-                ? `<button onclick="highlightCategory(null)" class="w-full mt-2 text-[11px] text-amber-300 hover:text-amber-200 bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/30 rounded py-1 transition-colors">已標示「${sel}」· 點此取消標示</button>`
-                : `<div class="text-[10px] text-slate-500 text-center mt-2">點圖或圖例可在熱力圖中標示該分群</div>`;
+                ? `<button onclick="highlightCategory(null)" class="w-full mt-2 text-[11px] text-amber-300 hover:text-amber-200 bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/30 rounded py-1 transition-colors">已標示「${sel}」${selInData ? '' : '（此分群未設投入資金）'} · 點此取消標示</button>`
+                : `<div class="text-[10px] text-slate-500 text-center mt-2">點圓環、圖例或熱力圖分群標題，皆可互相標示</div>`;
 
             host.innerHTML = svg + `<div class="mt-3 space-y-0.5">${legend}</div>` + hint;
 
@@ -1226,8 +1227,9 @@
             catDiv.style.borderColor = avgColor;
 
             const header = document.createElement('div');
-            header.className = "px-3 py-2 bg-slate-800 border-b-2 flex items-center justify-between gap-2";
+            header.className = "px-3 py-2 bg-slate-800 border-b-2 flex items-center justify-between gap-2 cursor-pointer hover:bg-slate-700/80 transition-colors";
             header.style.borderBottomColor = avgColor;
+            header.title = '點擊在資金配置圓環圖中標示此分群';
             header.innerHTML = `
                 <span class="text-slate-100 font-bold text-[13px] tracking-wide">${cat.id}</span>
                 <div class="flex items-center gap-1.5">
@@ -1235,6 +1237,7 @@
                     <span class="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-black/40 shadow-inner" style="color: ${avgColor}">${avgChange > 0 ? '+' : ''}${avgChange}%</span>
                 </div>
             `;
+            header.addEventListener('click', (e) => { e.stopPropagation(); highlightCategory(cat.id); });
             catDiv.appendChild(header);
 
             // 分群內再依市場切成「台股（上）／美股（下）」兩個子框
