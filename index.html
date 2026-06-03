@@ -203,6 +203,14 @@
             </div>
 
             <div class="p-4 border-b border-slate-700">
+                <h2 class="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"></path></svg>
+                    資金配置 (各分群佔比)
+                </h2>
+                <div id="allocationPanel"></div>
+            </div>
+
+            <div class="p-4 border-b border-slate-700">
                 <h2 class="text-sm font-semibold mb-2 flex items-center gap-2">
                     <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
                     新增分群 (Category)
@@ -871,7 +879,53 @@
 
         autoUpdateToggle.addEventListener('change', handleAutoUpdateSetup);
 
-        function updateAll() { updateDropdowns(); renderDataList(); renderChart(); }
+        function updateAll() { updateDropdowns(); renderDataList(); renderAllocationChart(); renderChart(); }
+
+        // ===== 資金配置圓環圖：各分群投入資金佔比 =====
+        const ALLOC_PALETTE = ['#3b82f6','#14b8a6','#f59e0b','#a855f7','#ec4899','#10b981','#ef4444','#6366f1','#eab308','#06b6d4','#f43f5e','#84cc16'];
+
+        function renderAllocationChart() {
+            const host = document.getElementById('allocationPanel');
+            if (!host) return;
+
+            const data = chartData.filter(d => d.type === 'category').map(cat => ({
+                name: cat.id,
+                value: chartData.filter(s => s.type === 'stock' && s.parent === cat.id).reduce((sum, s) => sum + getInvested(s), 0)
+            })).filter(d => d.value > 0);
+
+            if (data.length === 0) {
+                host.innerHTML = `<div class="text-[11px] text-slate-500 italic py-4 text-center leading-relaxed">尚未設定任何投入資金<br>點清單中股票旁的 <span class="text-amber-400">$</span> 圖示即可設定</div>`;
+                return;
+            }
+
+            const grand = data.reduce((s, d) => s + d.value, 0);
+            data.sort((a, b) => b.value - a.value); // 由大到小，圖例較好讀
+            data.forEach((d, i) => d.color = ALLOC_PALETTE[i % ALLOC_PALETTE.length]);
+
+            const size = 180, r = size / 2, inner = r * 0.62;
+            const pie = d3.pie().value(d => d.value).sort(null).padAngle(0.015);
+            const arcGen = d3.arc().innerRadius(inner).outerRadius(r).cornerRadius(3);
+            const paths = pie(data).map(a => `<path d="${arcGen(a)}" fill="${a.data.color}" stroke="#0f172a" stroke-width="1.5"></path>`).join('');
+
+            const svg = `
+                <svg viewBox="${-r} ${-r} ${size} ${size}" width="100%" class="max-w-[190px] mx-auto block">
+                    ${paths}
+                    <text x="0" y="-6" text-anchor="middle" style="fill:#94a3b8;font-size:9px">總投入</text>
+                    <text x="0" y="11" text-anchor="middle" style="fill:#f1f5f9;font-size:15px;font-weight:700;font-family:monospace">$${fmtMoney(grand)}</text>
+                </svg>`;
+
+            const legend = data.map(d => {
+                const pct = (d.value / grand * 100).toFixed(1);
+                return `<div class="flex items-center gap-2 text-[11px] py-0.5">
+                    <span class="inline-block w-2.5 h-2.5 rounded-sm flex-shrink-0" style="background:${d.color}"></span>
+                    <span class="flex-1 truncate text-slate-200">${d.name}</span>
+                    <span class="font-mono text-slate-400 w-10 text-right">${pct}%</span>
+                    <span class="font-mono text-amber-300 w-[78px] text-right">$${fmtMoney(d.value)}</span>
+                </div>`;
+            }).join('');
+
+            host.innerHTML = svg + `<div class="mt-3 space-y-0.5">${legend}</div>`;
+        }
 
         // 渲染分流：電腦版走原本的 renderTreemap（完全不變），行動版走 renderTreemapMobile
         function renderChart() {
