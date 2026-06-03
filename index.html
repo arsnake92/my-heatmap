@@ -203,9 +203,9 @@
             </div>
 
             <div class="p-4 border-b border-slate-700">
-                <h2 id="allocHeader" onclick="toggleAllocPanel()" class="text-sm font-semibold mb-3 flex items-center gap-2 cursor-pointer select-none" title="點此展開 / 收起資金配置">
+                <h2 id="allocHeader" onclick="toggleAllocPanel()" class="text-sm font-semibold mb-3 flex items-center gap-2 cursor-pointer select-none" title="點此展開 / 收起持倉配置">
                     <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"></path></svg>
-                    資金配置 (各分群佔比)
+                    持倉配置 (各分群市值佔比)
                     <svg id="allocChevron" class="w-4 h-4 text-slate-400 ml-auto transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                 </h2>
                 <div id="allocationPanel"></div>
@@ -617,18 +617,19 @@
                 if (catStocks.length === 0) { html += `<div class="text-xs text-slate-500 italic px-2 py-1">尚無股票，請從上方新增</div>`; } 
                 else {
                     catStocks.forEach(stock => {
-                        const inv = getInvested(stock);
+                        const sh = getShares(stock), v = getValue(stock);
                         html += `
                             <div class="flex justify-between items-center bg-slate-800/60 px-2 py-1.5 rounded border border-slate-700/50 hover:bg-slate-700/80 transition-colors">
                                 <div class="flex-1 flex justify-between pr-3 items-center gap-2">
                                     <span class="text-xs font-bold">${getDisplayId(stock.id)}</span>
                                     <div class="flex items-center gap-2">
-                                        ${inv > 0 ? `<span class="text-[10px] font-mono text-amber-300" title="投入資金">$${fmtMoney(inv)}</span>` : ''}
+                                        ${sh > 0 ? `<span class="text-[10px] font-mono text-slate-400" title="庫存股數">${fmtShares(sh)} 股</span>` : ''}
+                                        ${v > 0 ? `<span class="text-[10px] font-mono text-amber-300" title="目前市值">$${fmtMoney(v)}</span>` : ''}
                                         <span class="text-[10px] font-mono font-semibold" style="color: ${getChangeColor(stock.change)}">${stock.change >= 0 ? '+' : ''}${stock.change}%</span>
                                     </div>
                                 </div>
                                 <div class="flex gap-1 border-l border-slate-700 pl-1">
-                                    <button onclick="editInvestment('${stock.id}')" class="text-slate-400 hover:text-amber-400 p-1" title="設定投入資金"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path></svg></button>
+                                    <button onclick="editShares('${stock.id}')" class="text-slate-400 hover:text-amber-400 p-1" title="設定庫存股數"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path></svg></button>
                                     <button onclick="editStock('${stock.id}')" class="text-slate-400 hover:text-teal-400 p-1" title="修改股號"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg></button>
                                     <button onclick="deleteItem('${stock.id}')" class="text-slate-400 hover:text-red-400 p-1" title="刪除"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
                                 </div>
@@ -664,21 +665,22 @@
             showMessage(`股票代號已更新，正在重新抓取報價...`); saveData(); updateAll(); scheduleCloudPush(); fetchRealTimeData();
         }
 
-        function editInvestment(id) {
+        function editShares(id) {
             const stock = chartData.find(d => d.id === id && d.type === 'stock');
             if (!stock) return;
-            const cur = getInvested(stock);
-            const input = prompt(`設定「${getDisplayId(id)}」目前投入的資金金額：\n（輸入 0 或留空可清除）`, cur ? String(cur) : '');
+            const cur = getShares(stock);
+            const input = prompt(`設定「${getDisplayId(id)}」目前的庫存股數：\n市值會以「股數 × 現價」自動計算。（輸入 0 或留空可清除）`, cur ? String(cur) : '');
             if (input === null) return; // 按取消
-            const val = parseFloat(String(input).replace(/[,\s$]/g, ''));
+            const val = parseFloat(String(input).replace(/[,\s]/g, ''));
             if (input.trim() === '' || val === 0) {
-                delete stock.invested;
-                showMessage(`已清除 ${getDisplayId(id)} 的投入資金`);
+                delete stock.shares;
+                showMessage(`已清除 ${getDisplayId(id)} 的庫存`);
             } else if (isNaN(val) || val < 0) {
-                return showMessage('請輸入有效的金額', true);
+                return showMessage('請輸入有效的股數', true);
             } else {
-                stock.invested = val;
-                showMessage(`已設定 ${getDisplayId(id)} 投入資金：$${fmtMoney(val)}`);
+                stock.shares = val;
+                const v = getValue(stock);
+                showMessage(`已設定 ${getDisplayId(id)} 庫存：${fmtShares(val)} 股${v > 0 ? `（市值 $${fmtMoney(v)}）` : '（待更新報價後計算市值）'}`);
             }
             saveData(); updateAll(); scheduleCloudPush();
         }
@@ -708,7 +710,7 @@
                 chartData[existingIndex] = { ...chartData[existingIndex], parent: parent, change: change };
                 showMessage(`已更新股票歸屬: ${name}`);
             } else {
-                chartData.push({ id: name, parent: parent, type: 'stock', change: change, price: null, currency: 'USD', companyName: '', invested: 0 });
+                chartData.push({ id: name, parent: parent, type: 'stock', change: change, price: null, currency: 'USD', companyName: '', shares: 0 });
                 showMessage(`已新增股票: ${name}`);
             }
             expandedCategories.add(parent); document.getElementById('stockName').value = '';
@@ -934,7 +936,7 @@
 
         function updateAll() { updateDropdowns(); renderDataList(); renderAllocationChart(); renderChart(); }
 
-        // ===== 資金配置圓環圖：各分群投入資金佔比 =====
+        // ===== 持倉配置圓環圖：各分群市值（股數×現價）佔比 =====
         const ALLOC_PALETTE = ['#3b82f6','#14b8a6','#f59e0b','#a855f7','#ec4899','#10b981','#ef4444','#6366f1','#eab308','#06b6d4','#f43f5e','#84cc16'];
 
         function renderAllocationChart() {
@@ -943,11 +945,11 @@
 
             const data = chartData.filter(d => d.type === 'category').map(cat => ({
                 name: cat.id,
-                value: chartData.filter(s => s.type === 'stock' && s.parent === cat.id).reduce((sum, s) => sum + getInvested(s), 0)
+                value: chartData.filter(s => s.type === 'stock' && s.parent === cat.id).reduce((sum, s) => sum + getValue(s), 0)
             })).filter(d => d.value > 0);
 
             if (data.length === 0) {
-                host.innerHTML = `<div class="text-[11px] text-slate-500 italic py-4 text-center leading-relaxed">尚未設定任何投入資金<br>點清單中股票旁的 <span class="text-amber-400">$</span> 圖示即可設定</div>`;
+                host.innerHTML = `<div class="text-[11px] text-slate-500 italic py-4 text-center leading-relaxed">尚未有庫存市值<br>點清單中股票旁的 <span class="text-amber-400">$</span> 圖示設定庫存股數<br>（市值 = 股數 × 現價，會自動計算）</div>`;
                 return;
             }
 
@@ -957,7 +959,7 @@
 
             const esc = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
             const sel = highlightedCategory;
-            const selInData = !!sel && data.some(d => d.name === sel); // 被標示分群是否有投入資金（在圓環中）
+            const selInData = !!sel && data.some(d => d.name === sel); // 被標示分群是否有市值（在圓環中）
 
             const size = 180, r = size / 2, inner = r * 0.62;
             const pie = d3.pie().value(d => d.value).sort(null).padAngle(0.015);
@@ -973,7 +975,7 @@
             const svg = `
                 <svg viewBox="${-r} ${-r} ${size} ${size}" width="100%" class="max-w-[190px] mx-auto block">
                     ${paths}
-                    <text x="0" y="-6" text-anchor="middle" style="fill:#94a3b8;font-size:9px">總投入</text>
+                    <text x="0" y="-6" text-anchor="middle" style="fill:#94a3b8;font-size:9px">總市值</text>
                     <text x="0" y="11" text-anchor="middle" style="fill:#f1f5f9;font-size:15px;font-weight:700;font-family:monospace">$${fmtMoney(grand)}</text>
                 </svg>`;
 
@@ -990,7 +992,7 @@
             }).join('');
 
             const hint = sel
-                ? `<button onclick="highlightCategory(null)" class="w-full mt-2 text-[11px] text-amber-300 hover:text-amber-200 bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/30 rounded py-1 transition-colors">已標示「${sel}」${selInData ? '' : '（此分群未設投入資金）'} · 點此取消標示</button>`
+                ? `<button onclick="highlightCategory(null)" class="w-full mt-2 text-[11px] text-amber-300 hover:text-amber-200 bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/30 rounded py-1 transition-colors">已標示「${sel}」${selInData ? '' : '（此分群無庫存市值）'} · 點此取消標示</button>`
                 : `<div class="text-[10px] text-slate-500 text-center mt-2">點圓環、圖例或熱力圖分群標題，皆可互相標示</div>`;
 
             host.innerHTML = svg + `<div class="mt-3 space-y-0.5">${legend}</div>` + hint;
@@ -1094,10 +1096,10 @@
                 </div>
                 <div class="mt-2 bg-slate-900 rounded-lg p-3 border border-slate-700 flex items-center justify-between gap-3">
                     <div>
-                        <div class="text-[11px] text-slate-400 mb-1">投入資金</div>
-                        <div class="font-mono text-lg font-bold text-amber-300">${getInvested(stock) > 0 ? '$' + fmtMoney(getInvested(stock)) : '<span class="text-slate-500 italic text-base font-normal">未設定</span>'}</div>
+                        <div class="text-[11px] text-slate-400 mb-1">庫存 ${getShares(stock) > 0 ? fmtShares(getShares(stock)) + ' 股 · 市值' : ''}</div>
+                        <div class="font-mono text-lg font-bold text-amber-300">${getValue(stock) > 0 ? '$' + fmtMoney(getValue(stock)) : '<span class="text-slate-500 italic text-base font-normal">未設定庫存</span>'}</div>
                     </div>
-                    <button onclick="editInvestment('${stock.id}'); closeMobileSheet();" class="bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold py-2 px-3 rounded-lg flex-shrink-0">設定金額</button>
+                    <button onclick="editShares('${stock.id}'); closeMobileSheet();" class="bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold py-2 px-3 rounded-lg flex-shrink-0">設定庫存</button>
                 </div>
             `;
             document.getElementById('mobileSheet').classList.add('show');
@@ -1117,12 +1119,22 @@
                 : d3.scaleLinear().domain([-5, 0, 5]).range(["#16a34a", "#475569", "#dc2626"]).clamp(true)(change);
         }
 
-        // ===== 投入資金 / 市場分類 工具 =====
-        function getInvested(stock) {
-            return (stock && typeof stock.invested === 'number' && isFinite(stock.invested) && stock.invested > 0) ? stock.invested : 0;
+        // ===== 庫存 / 市值 / 市場分類 工具 =====
+        // 庫存股數（使用者輸入）
+        function getShares(stock) {
+            return (stock && typeof stock.shares === 'number' && isFinite(stock.shares) && stock.shares > 0) ? stock.shares : 0;
+        }
+        // 目前市值 = 庫存股數 × 現價（現價尚未抓到時為 0）
+        function getValue(stock) {
+            const sh = getShares(stock);
+            const p = (stock && typeof stock.price === 'number' && isFinite(stock.price)) ? stock.price : 0;
+            return sh * p;
         }
         function fmtMoney(n) {
             return Math.round(n).toLocaleString('en-US');
+        }
+        function fmtShares(n) {
+            return Number(n).toLocaleString('en-US', { maximumFractionDigits: 4 });
         }
         // 判斷是否為台股：代號為純數字、或帶 .TW / .TWO 後綴、或報價幣別為 TWD
         function isTWStock(stock) {
@@ -1150,11 +1162,11 @@
             stockDiv.className = "w-[54px] h-[54px] rounded-md flex flex-col items-center justify-center cursor-pointer transition-transform hover:scale-110 hover:z-10 relative border border-black/20 shadow-sm";
             stockDiv.style.backgroundColor = getChangeColor(stock.change);
 
-            const invested = getInvested(stock);
+            const shares = getShares(stock), value = getValue(stock);
             stockDiv.innerHTML = `
                 <span class="text-white font-bold text-[11px] truncate w-full text-center px-0.5 pointer-events-none">${getDisplayId(stock.id)}</span>
                 <span class="text-white/95 font-mono text-[9px] font-medium mt-0.5 pointer-events-none">${stock.change > 0 ? '+' : ''}${stock.change}%</span>
-                ${invested > 0 ? `<span class="text-white/90 font-mono text-[8px] leading-none mt-0.5 pointer-events-none">$${fmtMoney(invested)}</span>` : ''}
+                ${value > 0 ? `<span class="text-white/90 font-mono text-[8px] leading-none mt-0.5 pointer-events-none">$${fmtMoney(value)}</span>` : ''}
             `;
 
             stockDiv.addEventListener('mousemove', (event) => {
@@ -1163,15 +1175,15 @@
 
                 const priceDisplay = stock.price ? `<span class="font-mono text-white text-base">${stock.price}</span> <span class="text-xs text-slate-400">${stock.currency}</span>` : `<span class="text-slate-400 italic">無報價資料</span>`;
                 const companyNameText = stock.companyName || '（擷取中 / 無公司名稱）';
-                const investedRow = invested > 0
-                    ? `<div class="mt-1.5 flex items-center justify-between"><span class="text-[11px] text-slate-400">投入資金:</span><span class="text-sm font-mono font-bold text-amber-300">$${fmtMoney(invested)}</span></div>`
+                const holdingRow = shares > 0
+                    ? `<div class="mt-1.5 flex items-center justify-between gap-3"><span class="text-[11px] text-slate-400">庫存 ${fmtShares(shares)} 股 · 市值:</span><span class="text-sm font-mono font-bold text-amber-300">${value > 0 ? '$' + fmtMoney(value) : '—'}</span></div>`
                     : '';
 
                 tooltip.innerHTML = `
                     <div class="font-bold text-lg mb-0.5 flex items-center gap-2"><span>${getDisplayId(stock.id)}</span><span class="text-xs px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 font-normal border border-slate-600">${catId}</span></div>
                     <div class="text-[11px] text-blue-200 mb-2 font-medium opacity-90 truncate max-w-[250px]">${companyNameText}</div>
                     <div class="space-y-1 text-xs text-slate-300"><div>目前價格: ${priceDisplay}</div></div>
-                    ${investedRow}
+                    ${holdingRow}
                     <div class="mt-2.5 pt-1.5 border-t border-slate-700 flex items-center justify-between"><span class="text-[11px] text-slate-400">${periodLabel()}:</span><span class="text-base font-mono font-bold" style="color: ${getChangeColor(stock.change)}">${stock.change > 0 ? '+' : ''}${stock.change}%</span></div>
                 `;
 
@@ -1220,7 +1232,7 @@
             const totalChange = catStocks.reduce((sum, stock) => sum + stock.change, 0);
             const avgChange = (totalChange / catStocks.length).toFixed(2);
             const avgColor = getChangeColor(avgChange);
-            const totalInvested = catStocks.reduce((s, x) => s + getInvested(x), 0);
+            const totalValue = catStocks.reduce((s, x) => s + getValue(x), 0);
 
             const catDiv = document.createElement('div');
             catDiv.className = "bg-slate-900 border-2 rounded-xl overflow-hidden shadow-2xl flex flex-col transition-all";
@@ -1229,11 +1241,11 @@
             const header = document.createElement('div');
             header.className = "px-3 py-2 bg-slate-800 border-b-2 flex items-center justify-between gap-2 cursor-pointer hover:bg-slate-700/80 transition-colors";
             header.style.borderBottomColor = avgColor;
-            header.title = '點擊在資金配置圓環圖中標示此分群';
+            header.title = '點擊在持倉配置圓環圖中標示此分群';
             header.innerHTML = `
                 <span class="text-slate-100 font-bold text-[13px] tracking-wide">${cat.id}</span>
                 <div class="flex items-center gap-1.5">
-                    ${totalInvested > 0 ? `<span class="font-mono text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30" title="此分群投入資金總額">$${fmtMoney(totalInvested)}</span>` : ''}
+                    ${totalValue > 0 ? `<span class="font-mono text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30" title="此分群目前持倉市值">$${fmtMoney(totalValue)}</span>` : ''}
                     <span class="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-black/40 shadow-inner" style="color: ${avgColor}">${avgChange > 0 ? '+' : ''}${avgChange}%</span>
                 </div>
             `;
@@ -1294,7 +1306,7 @@
                 items: chartData
                     .filter(d => d.type === 'root' || d.type === 'category' || d.type === 'stock')
                     .map(d => d.type === 'stock'
-                        ? { id: d.id, parent: d.parent, type: d.type, invested: getInvested(d) }
+                        ? { id: d.id, parent: d.parent, type: d.type, shares: getShares(d) }
                         : { id: d.id, parent: d.parent, type: d.type })
             };
         }
@@ -1313,7 +1325,7 @@
                         price: (o.price !== undefined ? o.price : null),
                         currency: (o.currency || 'USD'),
                         companyName: (o.companyName || ''),
-                        invested: (typeof it.invested === 'number' ? it.invested : getInvested(o))
+                        shares: (typeof it.shares === 'number' ? it.shares : getShares(o))
                     };
                 }
                 return { id: it.id, parent: it.parent, type: it.type, change: 0 };
