@@ -127,9 +127,9 @@
                 <span class="text-[11px] text-slate-400 font-medium hidden sm:inline">週期</span>
                 <div id="periodSelector" class="flex items-center gap-0.5 bg-slate-800/80 p-0.5 rounded-lg border border-slate-700/60">
                     <button data-period="1d"  onclick="setPeriod('1d')"  class="period-btn text-xs font-medium px-2.5 py-1 rounded-md transition-colors">當日</button>
+                    <button data-period="3d"  onclick="setPeriod('3d')"  class="period-btn text-xs font-medium px-2.5 py-1 rounded-md transition-colors">三天</button>
                     <button data-period="1wk" onclick="setPeriod('1wk')" class="period-btn text-xs font-medium px-2.5 py-1 rounded-md transition-colors">一週</button>
                     <button data-period="2wk" onclick="setPeriod('2wk')" class="period-btn text-xs font-medium px-2.5 py-1 rounded-md transition-colors">兩週</button>
-                    <button data-period="1mo" onclick="setPeriod('1mo')" class="period-btn text-xs font-medium px-2.5 py-1 rounded-md transition-colors">一月</button>
                 </div>
             </div>
             <div class="h-4 w-px bg-slate-700 hidden sm:block"></div>
@@ -312,9 +312,9 @@
         const PERIOD_KEY = 'custom_heatmap_period_v8';
         const PERIODS = {
             '1d':  { label: '當日漲跌', short: '當日', days: 0  },
+            '3d':  { label: '三天漲跌', short: '三天', days: 3  },
             '1wk': { label: '一週漲跌', short: '一週', days: 7  },
             '2wk': { label: '兩週漲跌', short: '兩週', days: 14 },
-            '1mo': { label: '一月漲跌', short: '一月', days: 30 },
         };
         let currentPeriod = localStorage.getItem(PERIOD_KEY) || '1d';
         if (!PERIODS[currentPeriod]) currentPeriod = '1d';
@@ -768,9 +768,9 @@
                     if (!r) { fail++; return; }
                     const ts = r.timestamp, closes = r.indicators.quote[0].close;
                     const raw = {
+                        '3d':  pctFromCloses(ts, closes, 3),
                         '1wk': pctFromCloses(ts, closes, 7),
                         '2wk': pctFromCloses(ts, closes, 14),
-                        '1mo': pctFromCloses(ts, closes, 30),
                     };
                     const periods = {};
                     Object.keys(raw).forEach(k => { if (typeof raw[k] === 'number' && isFinite(raw[k])) periods[k] = raw[k]; });
