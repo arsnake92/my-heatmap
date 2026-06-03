@@ -260,6 +260,10 @@
                 <span id="messageText"></span>
             </div>
 
+            <button id="radialResetBtn" onclick="resetRadialPositions()" class="hidden absolute bottom-6 left-6 z-20 bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold py-2 px-3 rounded-lg shadow-xl backdrop-blur transition-colors" title="把圓環與分群方塊位置還原成自動排列">
+                ↺ 重設位置
+            </button>
+
             <div class="w-full h-full grab-cursor relative overflow-hidden" id="treemapContainer">
                 <div id="zoomLayer" class="absolute origin-top-left flex flex-wrap gap-5 p-6 items-start content-start transition-transform duration-75 min-w-[1000px] min-h-[800px]">
                 </div>
@@ -329,6 +333,12 @@
         // ===== 版面模式：'radial' 圓環檢視 / 'grid' 格狀檢視 =====
         const LAYOUT_KEY = 'custom_heatmap_layout_v8';
         let currentLayout = localStorage.getItem(LAYOUT_KEY) || 'radial';
+
+        // ===== 圓環檢視中，使用者拖動後的自訂位置（會存 localStorage 並隨雲端同步）=====
+        const RADIAL_POS_KEY = 'custom_heatmap_radial_pos_v8';
+        let radialPositions = {};
+        try { radialPositions = JSON.parse(localStorage.getItem(RADIAL_POS_KEY) || '{}') || {}; } catch (e) { radialPositions = {}; }
+        function saveRadialPositions() { localStorage.setItem(RADIAL_POS_KEY, JSON.stringify(radialPositions)); }
 
         // ===== 顯示週期（當日 / 一週 / 兩週 / 一月）=====
         const PERIOD_KEY = 'custom_heatmap_period_v8';
@@ -654,6 +664,7 @@
             if (cat) cat.id = newName.trim();
             chartData.forEach(d => { if (d.parent === oldId) d.parent = newName.trim(); });
             if (expandedCategories.has(oldId)) { expandedCategories.delete(oldId); expandedCategories.add(newName.trim()); }
+            if (radialPositions[oldId]) { radialPositions[newName.trim()] = radialPositions[oldId]; delete radialPositions[oldId]; saveRadialPositions(); }
             showMessage(`分群名稱已更新為：${newName.trim()}`); saveData(); updateAll(); scheduleCloudPush();
         }
 
@@ -726,6 +737,8 @@
                 chartData.forEach(d => { if (idsToDelete.has(d.parent) && !idsToDelete.has(d.id)) { idsToDelete.add(d.id); added = true; } });
             }
             chartData = chartData.filter(d => !idsToDelete.has(d.id));
+            idsToDelete.forEach(d => { if (radialPositions[d]) delete radialPositions[d]; });
+            saveRadialPositions();
             showMessage(`已刪除 ${id}`); saveData(); updateAll(); scheduleCloudPush();
         }
 
@@ -985,6 +998,8 @@
         // 渲染分流：依目前版面選圓環（donut + 環繞熱力圖）或格狀
         function renderChart() {
             if (currentLayout === 'radial') renderRadial(); else renderTreemap();
+            const resetBtn = document.getElementById('radialResetBtn');
+            if (resetBtn) resetBtn.classList.toggle('hidden', !(currentLayout === 'radial' && !IS_MOBILE));
             if (IS_MOBILE) fitMobileView();  // 手機進場時自動縮放到剛好塞滿螢幕
         }
 
@@ -1255,9 +1270,14 @@
         }
 
         // 圓環版面：中央資金配置圓環，各分群熱力圖環繞在對應扇形旁邊
+        // 座標模型：以「圓環圓心」為世界原點 (0,0)，各方塊/圓環存的是相對圓心的世界座標。
+        // 自訂位置存在 radialPositions（會存 localStorage 並隨雲端同步），所以行動版能看到電腦版拖動後的結果。
+        let radialState = null;
+
         function renderRadial() {
             zoomLayer.classList.add('justify-center');
             zoomLayer.innerHTML = '';
+            radialState = null;
             const cats = chartData.filter(d => d.type === 'category')
                 .map(cat => ({ cat, stocks: chartData.filter(s => s.type === 'stock' && s.parent === cat.id) }))
                 .filter(c => c.stocks.length > 0);
@@ -1290,53 +1310,59 @@
             const arcs = pie(cats);
             arcs.forEach((a, i) => cats[i].mid = (a.startAngle + a.endAngle) / 2);
 
-            // 放置半徑：不蓋到圓環，且周長足以容納所有方塊
+            // 自動放置半徑：不蓋到圓環，且周長足以容納所有方塊
             const maxHalf = Math.max(...cats.map(c => Math.max(c.w, c.h) / 2));
             const circumNeed = cats.reduce((s, c) => s + Math.max(c.w, c.h), 0) * 1.25;
             const dist = Math.max(R + gap + maxHalf, circumNeed / (2 * Math.PI));
-            cats.forEach(c => { c.x = dist * Math.sin(c.mid); c.y = -dist * Math.cos(c.mid); });
 
-            // 依內容計算畫布大小，並把圓心換算成畫布座標
-            let minX = -R, maxX = R, minY = -R, maxY = R;
+            // 世界座標：有自訂位置就用自訂的，否則用自動環繞位置
+            const donutPos = radialPositions['__donut__'] || { x: 0, y: 0 };
             cats.forEach(c => {
-                minX = Math.min(minX, c.x - c.w / 2); maxX = Math.max(maxX, c.x + c.w / 2);
-                minY = Math.min(minY, c.y - c.h / 2); maxY = Math.max(maxY, c.y + c.h / 2);
+                const saved = radialPositions[c.cat.id];
+                if (saved && isFinite(saved.x) && isFinite(saved.y)) { c.wx = saved.x; c.wy = saved.y; }
+                else { c.wx = dist * Math.sin(c.mid); c.wy = -dist * Math.cos(c.mid); }
             });
-            const pad = 30;
+
+            // 依內容計算畫布大小，把世界座標換算成畫布座標（originX/Y = 世界原點在畫布的位置）
+            let minX = donutPos.x - R, maxX = donutPos.x + R, minY = donutPos.y - R, maxY = donutPos.y + R;
+            cats.forEach(c => {
+                minX = Math.min(minX, c.wx - c.w / 2); maxX = Math.max(maxX, c.wx + c.w / 2);
+                minY = Math.min(minY, c.wy - c.h / 2); maxY = Math.max(maxY, c.wy + c.h / 2);
+            });
+            const pad = 40;
             const W = (maxX - minX) + pad * 2, H = (maxY - minY) + pad * 2;
-            const cx = -minX + pad, cy = -minY + pad;
+            const originX = -minX + pad, originY = -minY + pad;
             canvas.style.width = W + 'px';
             canvas.style.height = H + 'px';
 
             const ns = 'http://www.w3.org/2000/svg';
 
-            // 連接線（圓環扇形 → 對應分群方塊）
+            // 連接線 SVG（在方塊底下；座標於 redrawConnectors 內依實際位置計算）
             const lines = document.createElementNS(ns, 'svg');
             lines.setAttribute('width', W); lines.setAttribute('height', H);
             lines.style.position = 'absolute'; lines.style.left = '0'; lines.style.top = '0'; lines.style.pointerEvents = 'none';
             cats.forEach(c => {
                 const col = c.invested > 0 ? c.color : '#475569';
-                const sx = cx + R * Math.sin(c.mid), sy = cy - R * Math.cos(c.mid);
-                const ex = cx + c.x, ey = cy + c.y;
-                const line = document.createElementNS(ns, 'line');
-                line.setAttribute('x1', sx); line.setAttribute('y1', sy);
-                line.setAttribute('x2', ex); line.setAttribute('y2', ey);
-                line.setAttribute('stroke', col); line.setAttribute('stroke-width', '2');
-                line.setAttribute('stroke-dasharray', '5 4'); line.setAttribute('opacity', '0.65');
-                lines.appendChild(line);
-                const dot = document.createElementNS(ns, 'circle');
-                dot.setAttribute('cx', sx); dot.setAttribute('cy', sy); dot.setAttribute('r', '3.5'); dot.setAttribute('fill', col);
-                lines.appendChild(dot);
+                c.lineEl = document.createElementNS(ns, 'line');
+                c.lineEl.setAttribute('stroke', col); c.lineEl.setAttribute('stroke-width', '2');
+                c.lineEl.setAttribute('stroke-dasharray', '5 4'); c.lineEl.setAttribute('opacity', '0.65');
+                c.dotEl = document.createElementNS(ns, 'circle');
+                c.dotEl.setAttribute('r', '3.5'); c.dotEl.setAttribute('fill', col);
+                lines.appendChild(c.lineEl); lines.appendChild(c.dotEl);
             });
             canvas.appendChild(lines);
 
-            // 中央圓環本體
+            // 中央圓環（用 div 包住 svg，讓整個圓形範圍含中空處都能被拖曳）
             const arcGen = d3.arc().innerRadius(inner).outerRadius(R).cornerRadius(2);
+            const donutWrap = document.createElement('div');
+            donutWrap.style.position = 'absolute';
+            donutWrap.style.width = (R * 2) + 'px'; donutWrap.style.height = (R * 2) + 'px';
+            donutWrap.style.left = (originX + donutPos.x - R) + 'px';
+            donutWrap.style.top = (originY + donutPos.y - R) + 'px';
             const donut = document.createElementNS(ns, 'svg');
-            donut.setAttribute('width', R * 2); donut.setAttribute('height', R * 2);
+            donut.setAttribute('width', '100%'); donut.setAttribute('height', '100%');
             donut.setAttribute('viewBox', `${-R} ${-R} ${R * 2} ${R * 2}`);
-            donut.style.position = 'absolute';
-            donut.style.left = (cx - R) + 'px'; donut.style.top = (cy - R) + 'px';
+            donut.style.display = 'block'; donut.style.pointerEvents = 'none';
             let dh = '';
             arcs.forEach((a, i) => {
                 const c = cats[i];
@@ -1345,15 +1371,96 @@
             dh += `<text x="0" y="-7" text-anchor="middle" style="fill:#94a3b8;font-size:11px">總投入</text>`;
             dh += `<text x="0" y="14" text-anchor="middle" style="fill:#f1f5f9;font-size:18px;font-weight:700;font-family:monospace">$${fmtMoney(grand)}</text>`;
             donut.innerHTML = dh;
-            canvas.appendChild(donut);
+            donutWrap.appendChild(donut);
+            canvas.appendChild(donutWrap);
 
-            // 把方塊移到最上層並定位顯示
+            // 方塊移到最上層並依世界座標定位
             cats.forEach(c => {
-                canvas.appendChild(c.box); // 重新 append → 疊在連接線與圓環之上
+                canvas.appendChild(c.box);
                 c.box.style.visibility = 'visible';
-                c.box.style.left = (cx + c.x - c.w / 2) + 'px';
-                c.box.style.top = (cy + c.y - c.h / 2) + 'px';
+                c.box.style.left = (originX + c.wx - c.w / 2) + 'px';
+                c.box.style.top = (originY + c.wy - c.h / 2) + 'px';
             });
+
+            radialState = { cats, canvas, donutWrap, R, originX, originY };
+            redrawConnectors();
+
+            // 電腦版：可拖動圓環與各分群方塊（行動版不啟用，只看結果）
+            if (!IS_MOBILE) {
+                donutWrap.style.cursor = 'move';
+                makeRadialDraggable(donutWrap, () => redrawConnectors(), () => {
+                    radialPositions['__donut__'] = canvasCenterToWorld(donutWrap, R, R);
+                    persistRadialPositions();
+                });
+                cats.forEach(c => {
+                    c.box.style.cursor = 'move';
+                    makeRadialDraggable(c.box, () => redrawConnectors(), () => {
+                        radialPositions[c.cat.id] = canvasCenterToWorld(c.box, c.w / 2, c.h / 2);
+                        persistRadialPositions();
+                    });
+                });
+            }
+        }
+
+        // 依目前元素實際位置重畫所有連接線（圓環圓心 → 各方塊中心，線從圓環邊緣出發）
+        function redrawConnectors() {
+            if (!radialState) return;
+            const { cats, donutWrap, R } = radialState;
+            const dC = { x: parseFloat(donutWrap.style.left) + R, y: parseFloat(donutWrap.style.top) + R };
+            cats.forEach(c => {
+                const bC = { x: parseFloat(c.box.style.left) + c.w / 2, y: parseFloat(c.box.style.top) + c.h / 2 };
+                const ang = Math.atan2(bC.y - dC.y, bC.x - dC.x);
+                const sx = dC.x + R * Math.cos(ang), sy = dC.y + R * Math.sin(ang);
+                c.lineEl.setAttribute('x1', sx); c.lineEl.setAttribute('y1', sy);
+                c.lineEl.setAttribute('x2', bC.x); c.lineEl.setAttribute('y2', bC.y);
+                c.dotEl.setAttribute('cx', sx); c.dotEl.setAttribute('cy', sy);
+            });
+        }
+
+        // 把畫布上某元素的中心換算回世界座標（相對圓環圓心）
+        function canvasCenterToWorld(el, halfW, halfH) {
+            return {
+                x: parseFloat(el.style.left) + halfW - radialState.originX,
+                y: parseFloat(el.style.top) + halfH - radialState.originY
+            };
+        }
+
+        // 拖曳工具（電腦版）：移動 left/top；位移需除以目前縮放倍率 scale
+        function makeRadialDraggable(el, onMove, onEnd) {
+            el.addEventListener('mousedown', (e) => {
+                if (IS_MOBILE || e.button !== 0) return;
+                e.stopPropagation(); e.preventDefault();
+                tooltip.style.opacity = 0;
+                const startX = e.clientX, startY = e.clientY;
+                const origLeft = parseFloat(el.style.left), origTop = parseFloat(el.style.top);
+                el.style.zIndex = 50;
+                const mm = (ev) => {
+                    el.style.left = (origLeft + (ev.clientX - startX) / scale) + 'px';
+                    el.style.top = (origTop + (ev.clientY - startY) / scale) + 'px';
+                    onMove && onMove();
+                };
+                const mu = () => {
+                    window.removeEventListener('mousemove', mm);
+                    window.removeEventListener('mouseup', mu);
+                    el.style.zIndex = '';
+                    onEnd && onEnd();
+                };
+                window.addEventListener('mousemove', mm);
+                window.addEventListener('mouseup', mu);
+            });
+        }
+
+        function persistRadialPositions() {
+            saveRadialPositions();
+            scheduleCloudPush();
+        }
+
+        function resetRadialPositions() {
+            radialPositions = {};
+            saveRadialPositions();
+            scheduleCloudPush();
+            renderChart();
+            showMessage('已重設圓環版面位置');
         }
 
         // ========================================================
@@ -1367,6 +1474,7 @@
                 app: 'heatmap', v: 8,
                 updatedAt: Date.now(),
                 colorMode: currentMode,
+                radialPositions: radialPositions,
                 items: chartData
                     .filter(d => d.type === 'root' || d.type === 'category' || d.type === 'stock')
                     .map(d => d.type === 'stock'
@@ -1397,6 +1505,7 @@
             if (!rebuilt.find(d => d.type === 'root')) rebuilt.unshift({ id: 'ROOT', parent: '', type: 'root', change: 0 });
             chartData = rebuilt;
             if (snap.colorMode === 'US' || snap.colorMode === 'TW') { currentMode = snap.colorMode; updateColorModeButtonUI(); }
+            if (snap.radialPositions && typeof snap.radialPositions === 'object') { radialPositions = snap.radialPositions; saveRadialPositions(); }
             chartData.forEach(d => { if (d.type === 'category') expandedCategories.add(d.id); });
             saveData();
             return true;
