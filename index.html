@@ -146,6 +146,9 @@
                 <button id="colorModeBtn" class="bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold py-1.5 px-3 rounded-lg shadow transition-colors border border-slate-600">
                     台股 (紅漲綠跌)
                 </button>
+                <button id="layoutBtn" onclick="toggleLayout()" class="bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold py-1.5 px-3 rounded-lg shadow transition-colors border border-slate-600" title="切換 圓環 / 格狀 版面">
+                    🍩 圓環檢視
+                </button>
             </div>
         </div>
     </header>
@@ -318,10 +321,14 @@
         ];
 
         let chartData = [];
-        let currentMode = 'US'; 
-        const workerApiUrl = 'https://aged-cloud-8fb4.arthur920616.workers.dev'; 
+        let currentMode = 'US';
+        const workerApiUrl = 'https://aged-cloud-8fb4.arthur920616.workers.dev';
         let updateIntervalId = null;
         let isFetching = false;
+
+        // ===== 版面模式：'radial' 圓環檢視 / 'grid' 格狀檢視 =====
+        const LAYOUT_KEY = 'custom_heatmap_layout_v8';
+        let currentLayout = localStorage.getItem(LAYOUT_KEY) || 'radial';
 
         // ===== 顯示週期（當日 / 一週 / 兩週 / 一月）=====
         const PERIOD_KEY = 'custom_heatmap_period_v8';
@@ -975,9 +982,9 @@
             host.innerHTML = svg + `<div class="mt-3 space-y-0.5">${legend}</div>`;
         }
 
-        // 渲染分流：電腦版走原本的 renderTreemap（完全不變），行動版走 renderTreemapMobile
+        // 渲染分流：依目前版面選圓環（donut + 環繞熱力圖）或格狀
         function renderChart() {
-            renderTreemap();                 // 手機與電腦都用同一張 treemap
+            if (currentLayout === 'radial') renderRadial(); else renderTreemap();
             if (IS_MOBILE) fitMobileView();  // 手機進場時自動縮放到剛好塞滿螢幕
         }
 
@@ -1111,6 +1118,21 @@
 
         colorModeBtn.addEventListener('click', () => { currentMode = currentMode === 'US' ? 'TW' : 'US'; updateColorModeButtonUI(); saveData(); renderChart(); scheduleCloudPush(); });
 
+        // ===== 版面切換：圓環檢視 / 格狀檢視 =====
+        function updateLayoutButtonUI() {
+            const b = document.getElementById('layoutBtn');
+            if (!b) return;
+            b.textContent = currentLayout === 'radial' ? '🍩 圓環檢視' : '▦ 格狀檢視';
+        }
+
+        function toggleLayout() {
+            currentLayout = currentLayout === 'radial' ? 'grid' : 'radial';
+            localStorage.setItem(LAYOUT_KEY, currentLayout);
+            updateLayoutButtonUI();
+            if (!IS_MOBILE) { scale = 1; panX = 0; panY = 0; updateTransform(); }
+            renderChart();
+        }
+
         // 建立單一個股方塊（含 tooltip / 點擊行為），供分群中的台股 / 美股子框重複使用
         function buildStockTile(stock, catId) {
             const stockDiv = document.createElement('div');
@@ -1179,49 +1201,158 @@
             return box;
         }
 
+        // 建立單一分群方塊（標頭 + 台股/美股子框）；格狀與圓環兩種版面共用
+        function buildCategoryBox(cat) {
+            const catStocks = chartData.filter(d => d.type === 'stock' && d.parent === cat.id);
+            if (catStocks.length === 0) return null;
+
+            const totalChange = catStocks.reduce((sum, stock) => sum + stock.change, 0);
+            const avgChange = (totalChange / catStocks.length).toFixed(2);
+            const avgColor = getChangeColor(avgChange);
+            const totalInvested = catStocks.reduce((s, x) => s + getInvested(x), 0);
+
+            const catDiv = document.createElement('div');
+            catDiv.className = "bg-slate-900 border-2 rounded-xl overflow-hidden shadow-2xl flex flex-col transition-all";
+            catDiv.style.borderColor = avgColor;
+
+            const header = document.createElement('div');
+            header.className = "px-3 py-2 bg-slate-800 border-b-2 flex items-center justify-between gap-2";
+            header.style.borderBottomColor = avgColor;
+            header.innerHTML = `
+                <span class="text-slate-100 font-bold text-[13px] tracking-wide">${cat.id}</span>
+                <div class="flex items-center gap-1.5">
+                    ${totalInvested > 0 ? `<span class="font-mono text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30" title="此分群投入資金總額">$${fmtMoney(totalInvested)}</span>` : ''}
+                    <span class="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-black/40 shadow-inner" style="color: ${avgColor}">${avgChange > 0 ? '+' : ''}${avgChange}%</span>
+                </div>
+            `;
+            catDiv.appendChild(header);
+
+            // 分群內再依市場切成「台股（上）／美股（下）」兩個子框
+            const body = document.createElement('div');
+            body.className = "p-1.5 flex flex-col gap-1.5";
+            const twStocks = catStocks.filter(isTWStock);
+            const usStocks = catStocks.filter(s => !isTWStock(s));
+            [{ label: '台股', stocks: twStocks }, { label: '美股', stocks: usStocks }].forEach(g => {
+                if (g.stocks.length === 0) return;
+                body.appendChild(buildMarketBox(g.label, g.stocks, cat.id));
+            });
+            catDiv.appendChild(body);
+            return catDiv;
+        }
+
+        // 格狀版面：分群方塊依序排列（原本的熱力圖）
         function renderTreemap() {
+            zoomLayer.classList.remove('justify-center');
             zoomLayer.innerHTML = '';
             const stocks = chartData.filter(d => d.type === 'stock');
             if (stocks.length === 0) { document.getElementById('emptyState').classList.remove('hidden'); return; }
             document.getElementById('emptyState').classList.add('hidden');
 
             chartData.filter(d => d.type === 'category').forEach(cat => {
-                const catStocks = chartData.filter(d => d.type === 'stock' && d.parent === cat.id);
-                if (catStocks.length === 0) return;
+                const box = buildCategoryBox(cat);
+                if (box) zoomLayer.appendChild(box);
+            });
+        }
 
-                const totalChange = catStocks.reduce((sum, stock) => sum + stock.change, 0);
-                const avgChange = (totalChange / catStocks.length).toFixed(2);
-                const avgColor = getChangeColor(avgChange);
-                const totalInvested = catStocks.reduce((s, x) => s + getInvested(x), 0);
+        // 圓環版面：中央資金配置圓環，各分群熱力圖環繞在對應扇形旁邊
+        function renderRadial() {
+            zoomLayer.classList.add('justify-center');
+            zoomLayer.innerHTML = '';
+            const cats = chartData.filter(d => d.type === 'category')
+                .map(cat => ({ cat, stocks: chartData.filter(s => s.type === 'stock' && s.parent === cat.id) }))
+                .filter(c => c.stocks.length > 0);
+            if (cats.length === 0) { document.getElementById('emptyState').classList.remove('hidden'); return; }
+            document.getElementById('emptyState').classList.add('hidden');
 
-                const catDiv = document.createElement('div');
-                catDiv.className = "bg-slate-900 border-2 rounded-xl overflow-hidden shadow-2xl flex flex-col transition-all mb-2";
-                catDiv.style.borderColor = avgColor;
+            // 投入資金 → 圓環配比；無資金的分群給最小權重，仍能保有位置
+            cats.forEach(c => c.invested = c.stocks.reduce((s, x) => s + getInvested(x), 0));
+            const grand = cats.reduce((s, c) => s + c.invested, 0);
+            const minW = grand > 0 ? grand * 0.06 : 1;
+            cats.forEach((c, i) => { c.weight = Math.max(c.invested, minW); c.color = ALLOC_PALETTE[i % ALLOC_PALETTE.length]; });
 
-                const header = document.createElement('div');
-                header.className = "px-3 py-2 bg-slate-800 border-b-2 flex items-center justify-between gap-2";
-                header.style.borderBottomColor = avgColor;
-                header.innerHTML = `
-                    <span class="text-slate-100 font-bold text-[13px] tracking-wide">${cat.id}</span>
-                    <div class="flex items-center gap-1.5">
-                        ${totalInvested > 0 ? `<span class="font-mono text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30" title="此分群投入資金總額">$${fmtMoney(totalInvested)}</span>` : ''}
-                        <span class="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-black/40 shadow-inner" style="color: ${avgColor}">${avgChange > 0 ? '+' : ''}${avgChange}%</span>
-                    </div>
-                `;
-                catDiv.appendChild(header);
+            const canvas = document.createElement('div');
+            canvas.style.position = 'relative';
+            canvas.className = 'flex-shrink-0';
+            zoomLayer.appendChild(canvas);
 
-                // 分群內再依市場切成「台股（上）／美股（下）」兩個子框
-                const body = document.createElement('div');
-                body.className = "p-1.5 flex flex-col gap-1.5";
+            // 先建立並量測每個分群方塊（隱藏量測，避免閃爍）
+            cats.forEach(c => {
+                const box = buildCategoryBox(c.cat);
+                box.style.position = 'absolute';
+                box.style.visibility = 'hidden';
+                canvas.appendChild(box);
+                c.box = box; c.w = box.offsetWidth; c.h = box.offsetHeight;
+            });
 
-                const twStocks = catStocks.filter(isTWStock);
-                const usStocks = catStocks.filter(s => !isTWStock(s));
-                [{ label: '台股', stocks: twStocks }, { label: '美股', stocks: usStocks }].forEach(g => {
-                    if (g.stocks.length === 0) return;
-                    body.appendChild(buildMarketBox(g.label, g.stocks, cat.id));
-                });
+            // 圓環幾何與每個扇形的中心角度
+            const R = 130, inner = R * 0.62, gap = 60;
+            const pie = d3.pie().value(d => d.weight).sort(null).padAngle(0.012);
+            const arcs = pie(cats);
+            arcs.forEach((a, i) => cats[i].mid = (a.startAngle + a.endAngle) / 2);
 
-                catDiv.appendChild(body); zoomLayer.appendChild(catDiv);
+            // 放置半徑：不蓋到圓環，且周長足以容納所有方塊
+            const maxHalf = Math.max(...cats.map(c => Math.max(c.w, c.h) / 2));
+            const circumNeed = cats.reduce((s, c) => s + Math.max(c.w, c.h), 0) * 1.25;
+            const dist = Math.max(R + gap + maxHalf, circumNeed / (2 * Math.PI));
+            cats.forEach(c => { c.x = dist * Math.sin(c.mid); c.y = -dist * Math.cos(c.mid); });
+
+            // 依內容計算畫布大小，並把圓心換算成畫布座標
+            let minX = -R, maxX = R, minY = -R, maxY = R;
+            cats.forEach(c => {
+                minX = Math.min(minX, c.x - c.w / 2); maxX = Math.max(maxX, c.x + c.w / 2);
+                minY = Math.min(minY, c.y - c.h / 2); maxY = Math.max(maxY, c.y + c.h / 2);
+            });
+            const pad = 30;
+            const W = (maxX - minX) + pad * 2, H = (maxY - minY) + pad * 2;
+            const cx = -minX + pad, cy = -minY + pad;
+            canvas.style.width = W + 'px';
+            canvas.style.height = H + 'px';
+
+            const ns = 'http://www.w3.org/2000/svg';
+
+            // 連接線（圓環扇形 → 對應分群方塊）
+            const lines = document.createElementNS(ns, 'svg');
+            lines.setAttribute('width', W); lines.setAttribute('height', H);
+            lines.style.position = 'absolute'; lines.style.left = '0'; lines.style.top = '0'; lines.style.pointerEvents = 'none';
+            cats.forEach(c => {
+                const col = c.invested > 0 ? c.color : '#475569';
+                const sx = cx + R * Math.sin(c.mid), sy = cy - R * Math.cos(c.mid);
+                const ex = cx + c.x, ey = cy + c.y;
+                const line = document.createElementNS(ns, 'line');
+                line.setAttribute('x1', sx); line.setAttribute('y1', sy);
+                line.setAttribute('x2', ex); line.setAttribute('y2', ey);
+                line.setAttribute('stroke', col); line.setAttribute('stroke-width', '2');
+                line.setAttribute('stroke-dasharray', '5 4'); line.setAttribute('opacity', '0.65');
+                lines.appendChild(line);
+                const dot = document.createElementNS(ns, 'circle');
+                dot.setAttribute('cx', sx); dot.setAttribute('cy', sy); dot.setAttribute('r', '3.5'); dot.setAttribute('fill', col);
+                lines.appendChild(dot);
+            });
+            canvas.appendChild(lines);
+
+            // 中央圓環本體
+            const arcGen = d3.arc().innerRadius(inner).outerRadius(R).cornerRadius(2);
+            const donut = document.createElementNS(ns, 'svg');
+            donut.setAttribute('width', R * 2); donut.setAttribute('height', R * 2);
+            donut.setAttribute('viewBox', `${-R} ${-R} ${R * 2} ${R * 2}`);
+            donut.style.position = 'absolute';
+            donut.style.left = (cx - R) + 'px'; donut.style.top = (cy - R) + 'px';
+            let dh = '';
+            arcs.forEach((a, i) => {
+                const c = cats[i];
+                dh += `<path d="${arcGen(a)}" fill="${c.invested > 0 ? c.color : '#475569'}" stroke="#0f172a" stroke-width="1.5"></path>`;
+            });
+            dh += `<text x="0" y="-7" text-anchor="middle" style="fill:#94a3b8;font-size:11px">總投入</text>`;
+            dh += `<text x="0" y="14" text-anchor="middle" style="fill:#f1f5f9;font-size:18px;font-weight:700;font-family:monospace">$${fmtMoney(grand)}</text>`;
+            donut.innerHTML = dh;
+            canvas.appendChild(donut);
+
+            // 把方塊移到最上層並定位顯示
+            cats.forEach(c => {
+                canvas.appendChild(c.box); // 重新 append → 疊在連接線與圓環之上
+                c.box.style.visibility = 'visible';
+                c.box.style.left = (cx + c.x - c.w / 2) + 'px';
+                c.box.style.top = (cy + c.y - c.h / 2) + 'px';
             });
         }
 
@@ -1492,6 +1623,7 @@
 
             updateAll();
             applyAllocCollapse();
+            updateLayoutButtonUI();
             updatePeriodUI();
             handleAutoUpdateSetup();
             fetchRealTimeData();
